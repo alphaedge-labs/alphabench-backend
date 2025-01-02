@@ -1,0 +1,206 @@
+services:
+    alphabench__fastapi:
+        build: .
+        image: alphabench__fastapi:latest
+        container_name: alphabench__fastapi
+        command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+        volumes:
+            - .:/app
+        ports:
+            - "8000:8000"
+        environment:
+            - ENV_FILE=.env
+        env_file:
+            - .env
+        depends_on:
+            - alphabench__postgres
+            - alphabench__redis
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+        networks:
+            - alphabench__network
+
+    celery_worker_script_generator:
+        build: .
+        container_name: celery_worker_script_generator
+        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info --queues=script_generation
+        volumes:
+            - .:/app
+        env_file:
+            - .env
+        depends_on:
+            - alphabench__redis
+            - alphabench__postgres
+        healthcheck:
+            test: ["CMD", "pgrep", "celery"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+        networks:
+            - alphabench__network
+
+    celery_worker_script_validator:
+        build: .
+        container_name: celery_worker_script_validator
+        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info --queues=script_validation
+        volumes:
+            - .:/app
+        env_file:
+            - .env
+        depends_on:
+            - alphabench__redis
+            - alphabench__postgres
+        healthcheck:
+            test: ["CMD", "pgrep", "celery"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+        networks:
+            - alphabench__network
+
+    celery_worker_backtest:
+        build: .
+        container_name: celery_worker_backtest
+        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info --queues=backtest_execution
+        volumes:
+            - .:/app
+        env_file:
+            - .env
+        depends_on:
+            - alphabench__redis
+            - alphabench__postgres
+        healthcheck:
+            test: ["CMD", "pgrep", "celery"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+        networks:
+            - alphabench__network
+
+    celery_worker_report:
+        build: .
+        container_name: celery_worker_report
+        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info --queues=report_generation
+        volumes:
+            - .:/app
+        env_file:
+            - .env
+        depends_on:
+            - alphabench__redis
+            - alphabench__postgres
+        healthcheck:
+            test: ["CMD", "pgrep", "celery"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+        networks:
+            - alphabench__network
+
+    celery_beat:
+        build: .
+        container_name: celery_beat
+        command: celery -A src.infrastructure.queue.celery_app beat --loglevel=info
+        volumes:
+            - .:/app
+        env_file:
+            - .env
+        depends_on:
+            - alphabench__redis
+        healthcheck:
+            test: ["CMD", "pgrep", "celery"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+        networks:
+            - alphabench__network
+
+    alphabench__postgres:
+        image: timescale/timescaledb:latest-pg15
+        container_name: alphabench__postgres
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+            - ./scripts/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql
+        environment:
+            - POSTGRES_USER=${POSTGRES_USER}
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+            - POSTGRES_DB=${POSTGRES_DB}
+        ports:
+            - "5432:5432"
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}",
+                ]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+        networks:
+            - alphabench__network
+
+    alphabench__redis:
+        image: redis:latest
+        container_name: alphabench__redis
+        command: redis-server --requirepass ${REDIS_PASSWORD}
+        ports:
+            - "${REDIS_PORT}:6379"
+        environment:
+            - REDIS_PASSWORD=${REDIS_PASSWORD}
+        healthcheck:
+            test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+            interval: 10s
+            timeout: 5s
+            retries: 3
+            start_period: 30s
+        restart: always
+        volumes:
+            - redis_data:/data
+        networks:
+            - alphabench__network
+
+    alphabench__prometheus:
+        image: prom/prometheus:v2.44.0
+        container_name: alphabench__prometheus
+        volumes:
+            - ./prometheus:/etc/prometheus
+            - prometheus_data:/prometheus
+        command:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+        ports:
+            - "9090:9090"
+        healthcheck:
+            test: ["CMD", "wget", "--spider", "http://localhost:9090/-/healthy"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+        networks:
+            - alphabench__network
+
+    alphabench__grafana:
+        image: grafana/grafana:9.5.2
+        container_name: alphabench__grafana
+        ports:
+            - "3000:3000"
+        volumes:
+            - grafana_data:/var/lib/grafana
+        healthcheck:
+            test:
+                ["CMD", "wget", "--spider", "http://localhost:3000/api/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+        networks:
+            - alphabench__network
+
+volumes:
+    postgres_data:
+    redis_data:
+    prometheus_data:
+    grafana_data:
+
+networks:
+    alphabench__network:
+        driver: bridge

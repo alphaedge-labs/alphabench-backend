@@ -1,0 +1,140 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# IDE - PyCharm
+.idea/
+*.iml
+*.iws
+.idea_modules/
+
+# IDE - Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# Testing
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Docker
+.docker/
+docker-compose.override.yml
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Application specific
+data/
+uploads/
+downloads/
+temp/
+.DS_Store
+*.csv
+*.xlsx
+*.xls
+*.pdf
+*.zip
+*.tar.gz
+*.sql
+
+# Prometheus & Grafana
+prometheus_data/
+grafana_data/
+
+# AWS
+.aws/
+*.pem
+
+# Redis
+dump.rdb
+
+# Local development settings
+local_settings.py
+settings_local.py
+
+# Cache
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Poetry
+poetry.lock
+
+# Shell scripts
+*.sh
+!scripts/*.sh
+
+# Certificates
+*.pem
+*.crt
+*.key
+*.csr
+
+# Backup files
+*.bak
+*.swp
+*.swo
+*~
+
+# Local documentation
+/site
+/docs/_build/
+
+# Generated files
+/generated/
+*.generated.*
+
+# System files
+.DS_Store
+Thumbs.db
