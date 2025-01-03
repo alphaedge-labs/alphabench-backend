@@ -1,5 +1,6 @@
 from openai import AsyncOpenAI
-from typing import Optional
+from logging import getLogger
+import re
 
 from src.config.settings import settings
 from src.utils.metrics import (
@@ -9,6 +10,7 @@ from src.utils.metrics import (
 )
 
 client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+logger = getLogger()
 
 @track_time(LLM_REQUEST_DURATION.labels(operation='title_generation'))
 async def generate_strategy_title(strategy_description: str) -> str:
@@ -42,20 +44,29 @@ async def generate_strategy_title(strategy_description: str) -> str:
         # Log error here
         return "Custom Trading Strategy"  # Fallback title
 
-async def generate_backtest_script(strategy_description: str) -> tuple[str, list[str]]:
+async def generate_backtest_script(strategy_description: str, extra_message: str) -> tuple[str, list[str]]:
     """Generate Python script and required data points for the strategy"""
     try:
+        system_prompt = (
+            "You are a Python trading strategy expert. Generate a detailed backtesting script with comprehensive logging for the given strategy description in prompt."
+            "For each prompt, you must:\n"
+            "1. Generate a Python script that accepts a CSV file as an argument (e.g., `python script.py -d data.csv`).\n"
+            "2. Include detailed logging of entry/exit points, reasons, and performance metrics such that backtesting report can be generated from these logs\n"
+            "3. REMEMBER! Add a sentence at the end of your response which specifies the required data columns in data.csv explicitly in this format: 'Required data columns: column1, column2, column3'\n"
+            "Do not generate any more data than I have asked you to generate."
+        )
+
+        if extra_message:
+            system_prompt = system_prompt + f"\n{extra_message}"
+
+        logger.info(f"Generated system prompt: {system_prompt}")
+
         response = await client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[
                 {
                     "role": "system",
-                    "content": """You are a Python trading strategy expert. Generate a detailed backtesting script with comprehensive logging for the given strategy description. 
-                    The script should:
-                    1. Accept a CSV file path as --data argument
-                    2. Include detailed logging of entry/exit points, reasons, and performance metrics
-                    3. Return a list of required data points
-                    Format: Return both the Python script and a list of required data columns."""
+                    "content": system_prompt
                 },
                 {
                     "role": "user",
@@ -66,14 +77,21 @@ async def generate_backtest_script(strategy_description: str) -> tuple[str, list
             temperature=0.2
         )
         
-        content = response.choices[0].message.content
+        content = response.choices[0].message.content.strip()
         
+        print('content: ', content)
+
         # Parse response to separate script and data points
-        # Implementation depends on how we structure the LLM's response
-        script = "# Generated script\n" + content  # Placeholder
-        data_points = ["close", "volume"]  # Placeholder
-        
-        return script, data_points
+        # Use regular expressions to extract the script and data columns
+        script_match = re.search(r'```python\n(.*?)```', content, re.DOTALL)
+        data_columns_match = re.search(r'(Required data columns:.*)', content, re.DOTALL)
+        if data_columns_match:
+            data_columns = [col.strip() for col in data_columns_match.group(1).replace("Required data columns:", "").split(',')]
+        else:
+            data_columns = None
+
+        script = script_match.group(1).strip() if script_match else None
+        return script, data_columns
     except Exception as e:
         # Log error here
         raise Exception(f"Failed to generate backtest script: {str(e)}")

@@ -2,6 +2,7 @@ import boto3
 from botocore.exceptions import ClientError
 from typing import Optional
 import os
+import logging
 
 from src.config.settings import settings
 from src.utils.metrics import (
@@ -9,6 +10,8 @@ from src.utils.metrics import (
     S3_OPERATION_DURATION,
     track_time
 )
+
+logger = logging.getLogger()
 
 class S3Client:
     def __init__(self):
@@ -21,7 +24,7 @@ class S3Client:
         self.bucket_name = settings.S3_BUCKET_NAME
 
     @track_time(S3_OPERATION_DURATION.labels(operation='upload'))
-    async def upload_file_content(
+    def upload_file_content(
         self,
         key: str,
         content: str,
@@ -29,18 +32,24 @@ class S3Client:
     ) -> bool:
         """Upload string content to S3"""
         try:
+            logger.info(f"Attempting to upload to bucket: {self.bucket_name}, key: {key}")
             self.client.put_object(
                 Bucket=self.bucket_name,
                 Key=key,
                 Body=content.encode('utf-8'),
                 ContentType=content_type
             )
+            logger.info(f"Successfully uploaded to {key}")
             S3_OPERATION_COUNT.labels(
                 operation='upload',
                 status='success'
             ).inc()
             return True
         except ClientError as e:
+            logger.error(f"S3 upload failed: {str(e)}")
+            logger.error(f"Using bucket: {self.bucket_name}")
+            logger.error(f"AWS credentials: Access Key ID: {os.getenv('AWS_ACCESS_KEY_ID', 'Not set')[:5]}...")
+            
             # Log error here
             S3_OPERATION_COUNT.labels(
                 operation='upload',

@@ -59,7 +59,8 @@ async def list_plans(
     Returns a list of plans with their features and pricing.
     This endpoint is publicly accessible without authentication.
     """
-    return get_subscription_plans(db)
+    with db as conn:
+        return get_subscription_plans(conn)
 
 @router.get(
     "/active",

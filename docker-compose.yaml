@@ -1,6 +1,8 @@
 services:
     alphabench__fastapi:
-        build: .
+        build:
+            context: .
+            dockerfile: Dockerfile # Use the main Dockerfile for FastAPI
         image: alphabench__fastapi:latest
         container_name: alphabench__fastapi
         command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
@@ -24,13 +26,15 @@ services:
             - alphabench__network
 
     celery_worker_script_generator:
-        build: .
+        build:
+            context: .
+            dockerfile: Dockerfile.worker # Use a separate Dockerfile for workers
         container_name: celery_worker_script_generator
-        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info --queues=script_generation
+        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info -E --queues=script_generation
         volumes:
             - .:/app
         env_file:
-            - .env
+            - .env.prod
         depends_on:
             - alphabench__redis
             - alphabench__postgres
@@ -43,13 +47,15 @@ services:
             - alphabench__network
 
     celery_worker_script_validator:
-        build: .
+        build:
+            context: .
+            dockerfile: Dockerfile.worker # Use a separate Dockerfile for workers
         container_name: celery_worker_script_validator
-        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info --queues=script_validation
+        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info -E --queues=script_validation
         volumes:
             - .:/app
         env_file:
-            - .env
+            - .env.prod
         depends_on:
             - alphabench__redis
             - alphabench__postgres
@@ -62,13 +68,15 @@ services:
             - alphabench__network
 
     celery_worker_backtest:
-        build: .
+        build:
+            context: .
+            dockerfile: Dockerfile.worker # Use a separate Dockerfile for workers
         container_name: celery_worker_backtest
-        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info --queues=backtest_execution
+        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info -E --queues=backtest_execution
         volumes:
             - .:/app
         env_file:
-            - .env
+            - .env.prod
         depends_on:
             - alphabench__redis
             - alphabench__postgres
@@ -81,13 +89,15 @@ services:
             - alphabench__network
 
     celery_worker_report:
-        build: .
+        build:
+            context: .
+            dockerfile: Dockerfile.worker # Use a separate Dockerfile for workers
         container_name: celery_worker_report
-        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info --queues=report_generation
+        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info -E --queues=report_generation
         volumes:
             - .:/app
         env_file:
-            - .env
+            - .env.prod
         depends_on:
             - alphabench__redis
             - alphabench__postgres
@@ -100,13 +110,15 @@ services:
             - alphabench__network
 
     celery_beat:
-        build: .
+        build:
+            context: .
+            dockerfile: Dockerfile.worker # Use a separate Dockerfile for workers
         container_name: celery_beat
         command: celery -A src.infrastructure.queue.celery_app beat --loglevel=info
         volumes:
             - .:/app
         env_file:
-            - .env
+            - .env.prod
         depends_on:
             - alphabench__redis
         healthcheck:
@@ -161,45 +173,58 @@ services:
         networks:
             - alphabench__network
 
-    alphabench__prometheus:
-        image: prom/prometheus:v2.44.0
-        container_name: alphabench__prometheus
-        volumes:
-            - ./prometheus:/etc/prometheus
-            - prometheus_data:/prometheus
-        command:
-            - "--config.file=/etc/prometheus/prometheus.yml"
+    celery_flower:
+        image: mher/flower:latest
+        container_name: celery_flower
+        command: celery flower --broker=redis://:${REDIS_PASSWORD}@alphabench__redis:6379/0 --port=5555 --persistent=True --enable_events=True
         ports:
-            - "9090:9090"
-        healthcheck:
-            test: ["CMD", "wget", "--spider", "http://localhost:9090/-/healthy"]
-            interval: 30s
-            timeout: 10s
-            retries: 3
+            - "5555:5555"
+        environment:
+            - FLOWER_BASIC_AUTH=admin:password # Optional: Basic authentication
+        depends_on:
+            - alphabench__redis
         networks:
             - alphabench__network
 
-    alphabench__grafana:
-        image: grafana/grafana:9.5.2
-        container_name: alphabench__grafana
-        ports:
-            - "3000:3000"
-        volumes:
-            - grafana_data:/var/lib/grafana
-        healthcheck:
-            test:
-                ["CMD", "wget", "--spider", "http://localhost:3000/api/health"]
-            interval: 30s
-            timeout: 10s
-            retries: 3
-        networks:
-            - alphabench__network
+    # alphabench__prometheus:
+    #     image: prom/prometheus:v2.44.0
+    #     container_name: alphabench__prometheus
+    #     volumes:
+    #         - ./prometheus:/etc/prometheus
+    #         - prometheus_data:/prometheus
+    #     command:
+    #         - "--config.file=/etc/prometheus/prometheus.yml"
+    #     ports:
+    #         - "9090:9090"
+    #     healthcheck:
+    #         test: ["CMD", "wget", "--spider", "http://localhost:9090/-/healthy"]
+    #         interval: 30s
+    #         timeout: 10s
+    #         retries: 3
+    #     networks:
+    #         - alphabench__network
+
+    # alphabench__grafana:
+    #     image: grafana/grafana:9.5.2
+    #     container_name: alphabench__grafana
+    #     ports:
+    #         - "3000:3000"
+    #     volumes:
+    #         - grafana_data:/var/lib/grafana
+    #     healthcheck:
+    #         test:
+    #             ["CMD", "wget", "--spider", "http://localhost:3000/api/health"]
+    #         interval: 30s
+    #         timeout: 10s
+    #         retries: 3
+    #     networks:
+    #         - alphabench__network
 
 volumes:
     postgres_data:
     redis_data:
-    prometheus_data:
-    grafana_data:
+    # prometheus_data:
+    # grafana_data:
 
 networks:
     alphabench__network:

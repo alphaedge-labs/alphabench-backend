@@ -10,7 +10,8 @@ from src.schemas.backtests import (
     BacktestCreate
 )
 from src.api.dependencies import check_user_rate_limit
-from src.tasks.script_generation import generate_backtest_script
+from src.tasks.script_generation import generate_backtest_script_task as generate_backtest_script
+
 from src.db.queries.backtests import (
     create_backtest_request,
     get_user_backtests,
@@ -76,11 +77,13 @@ async def create_backtest(
     backtest_dict = backtest.model_dump()
     backtest_dict['strategy_title'] = strategy_title
     
-    backtest_db = create_backtest_request(
-        db=db,
-        user_id=current_user['id'],
-        backtest=backtest_dict
-    )
+    with db as conn:  # Use the connection within a context manager
+        backtest_db = create_backtest_request(
+            conn=conn,
+            user_id=current_user['id'],
+            backtest=backtest_dict
+        )
+    
     
     # Queue backtest for processing
     generate_backtest_script.delay(backtest_id=backtest_db['id'])
@@ -114,8 +117,9 @@ async def list_backtests(
     
     Results are ordered by creation date (newest first).
     """
-    backtests = get_user_backtests(db, current_user['id'])
-    return [BacktestResponse(**backtest) for backtest in backtests]
+    with db as conn:
+        backtests = get_user_backtests(conn, current_user['id'])
+        return [BacktestResponse(**backtest) for backtest in backtests]
 
 @router.get("/{backtest_id}", response_model=BacktestResponse)
 async def get_backtest(
@@ -126,8 +130,14 @@ async def get_backtest(
     """
     Get specific backtest details
     """
-    backtest = get_backtest_by_id(db, backtest_id)
-    
+
+    print('> backtest_id: ', backtest_id)
+    print('> current_user: ', current_user['id'])
+
+    with db as conn:
+        backtest = get_backtest_by_id(conn=conn, backtest_id=backtest_id)
+        print('> backtest returned: ', backtest)
+
     if not backtest or backtest['user_id'] != current_user['id']:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -1,9 +1,5 @@
 # alphabench Backend Documentation
 
-## Overview
-
-alphabench is a backtesting platform that allows users to describe trading strategies in natural language and receive detailed backtesting reports. The system handles everything from strategy interpretation to report generation through a series of distributed workers.
-
 ## Authentication & Authorization
 
 ### Google OAuth Flow (`src/api/routes/auth.py`, `src/core/auth/google.py`)
