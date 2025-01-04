@@ -15,7 +15,9 @@ class ConnectionManager:
         self.active_connections[user_id] = websocket
         logger.info(f"User {user_id} connected.")
 
-    def disconnect(self, user_id):
+    def disconnect(self, websocket: WebSocket):
+        user_id = next((uid for uid, conn in self.active_connections.items() if conn == websocket), None)
+        
         if user_id in self.active_connections:
             self.active_connections.pop(user_id)
             logger.info(f"User {user_id} disconnected.")
