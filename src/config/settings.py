@@ -2,6 +2,9 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 
 class Settings(BaseSettings):
+    # FastAPI
+    PORT: int = 8000
+
     # Database settings
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str

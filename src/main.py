@@ -3,9 +3,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from prometheus_client import make_asgi_app
+from fastapi.websockets import WebSocket, WebSocketDisconnect
 
 from src.api.middleware import AnonymousUserMiddleware, PrometheusMiddleware
-from src.api.routes import auth, backtests, reports, subscriptions, health
+from src.api.routes import auth, backtests, reports, subscriptions, health, users
+from src.api.services.websocket import manager
 
 def custom_openapi():
     if app.openapi_schema:
@@ -103,6 +105,7 @@ app.include_router(backtests.router)
 app.include_router(reports.router)
 app.include_router(subscriptions.router)
 app.include_router(health.router)
+app.include_router(users.router)
 
 # Create metrics endpoint
 metrics_app = make_asgi_app()
@@ -111,3 +114,12 @@ app.mount("/metrics", metrics_app)
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket, user_id: str):
+    await manager.connect(user_id=user_id, websocket=websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(user_id=user_id, websocket=websocket)

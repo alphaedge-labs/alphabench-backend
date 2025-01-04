@@ -11,11 +11,14 @@ class AnonymousUserMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Skip middleware for authentication endpoints
         if request.url.path.startswith("/api/v1/auth"):
+            print('> return await call_next(request)')
             return await call_next(request)
             
         # Check for authorization header
         auth_header: Optional[str] = request.headers.get("Authorization")
-        
+        # Initialize token variable
+        token = None
+
         # If no auth header, create anonymous user
         if not auth_header:
             user = await identify_anonymous_user(request)
@@ -30,6 +33,11 @@ class AnonymousUserMiddleware(BaseHTTPMiddleware):
             )
             
         response = await call_next(request)
+
+        # Add token to the response headers if it was created
+        if token:
+            response.headers["X-Anonymous-Token"] = token
+
         return response
 
 class PrometheusMiddleware(BaseHTTPMiddleware):

@@ -1,8 +1,13 @@
 from typing import List, Optional
 from uuid import UUID
 import logging
+import asyncio
 
 from src.db.base import execute_query, execute_query_single
+
+from src.api.services.postbacks import (
+    post_backtest_update
+)
 
 logger = logging.getLogger()
 
@@ -65,18 +70,34 @@ def get_backtest_by_id(conn, backtest_id: UUID) -> Optional[dict]:
 
 def update_backtest_status(conn, backtest_id: UUID, status: str, error_message: Optional[str] = None) -> dict:
     """Update backtest status and error message"""
-    return execute_query_single(
-        conn,
-        """
-        UPDATE backtest_requests
-        SET status = %s,
-            error_message = %s,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = %s
-        RETURNING *
-        """,
-        (status, error_message, backtest_id)
-    )
+    try:
+        result = execute_query_single(
+            conn,
+            """
+            UPDATE backtest_requests
+            SET status = %s,
+                error_message = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+            RETURNING *
+            """,
+            (status, error_message, backtest_id)
+        )
+        conn.commit()
+
+        logger.info(f"Successfully updated backtest status: {result}")
+
+        # Broadcast the backtest update asynchronously
+        asyncio.run(post_backtest_update(backtest_id=backtest_id))
+
+        logger.info("Broadcast backtest update initiated.")
+        return result
+    except Exception as e:
+        print('> error: ', e)
+        # Rollback the transaction to maintain consistency
+        conn.rollback()
+        logger.warning(f"Error updating status for backtest {backtest_id}: {e}", exc_info=True)
+        return None
 
 def update_backtest_urls(
     conn,
@@ -112,8 +133,8 @@ def update_backtest_urls(
             )
         )
         conn.commit()
+        asyncio.run(post_backtest_update(backtest_id=backtest_id))
         return result
     except Exception as e:
         conn.rollback()
         logger.warning(f'Error updating backtest file: {e}')
-

@@ -11,9 +11,9 @@ services:
         ports:
             - "8000:8000"
         environment:
-            - ENV_FILE=.env
+            - ENV_FILE=.env.prod
         env_file:
-            - .env
+            - .env.prod
         depends_on:
             - alphabench__postgres
             - alphabench__redis

@@ -1,4 +1,5 @@
 # src/api/routes/backtests.py
+import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
 from uuid import UUID
@@ -7,7 +8,8 @@ from src.db.base import get_db
 from src.schemas.backtests import (
     BacktestRequest,
     BacktestResponse,
-    BacktestCreate
+    BacktestCreate,
+    BacktestUpdate
 )
 from src.api.dependencies import check_user_rate_limit
 from src.tasks.script_generation import generate_backtest_script_task as generate_backtest_script
@@ -18,6 +20,8 @@ from src.db.queries.backtests import (
     get_backtest_by_id
 )
 from src.infrastructure.llm.openai_client import generate_strategy_title
+
+from src.api.services.websocket import manager
 
 router = APIRouter(prefix="/api/v1/backtests", tags=["backtests"])
 
@@ -130,13 +134,8 @@ async def get_backtest(
     """
     Get specific backtest details
     """
-
-    print('> backtest_id: ', backtest_id)
-    print('> current_user: ', current_user['id'])
-
     with db as conn:
         backtest = get_backtest_by_id(conn=conn, backtest_id=backtest_id)
-        print('> backtest returned: ', backtest)
 
     if not backtest or backtest['user_id'] != current_user['id']:
         raise HTTPException(
@@ -145,3 +144,29 @@ async def get_backtest(
         )
     
     return BacktestResponse(**backtest)
+
+@router.post("/broadcast/{backtest_id}", status_code=status.HTTP_200_OK)
+async def broadcast_backtest(
+    backtest_id: UUID,
+    db = Depends(get_db)
+):
+    """
+    Broadcast backtest update to the user.
+    """
+    with db as conn:
+        backtest_update = get_backtest_by_id(conn, backtest_id=backtest_id)
+
+        if not backtest_update:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Backtest not found"
+            )
+
+        data = {
+            "event": "backtest.update",
+            "data": BacktestUpdate(**backtest_update).model_dump()
+        }
+
+        await manager.broadcast(backtest_update["user_id"], json.dumps(data))
+        
+        return {"message": "Backtest update broadcasted successfully"}

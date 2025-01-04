@@ -50,7 +50,10 @@ def generate_backtest_script_task(self, backtest_id: UUID):
 
             backtest = update_backtest_status(conn, backtest_id, "generating_script")
 
-            logger.info(f"Updated status to generating_script for backtest {backtest_id}")
+            if not backtest:
+                raise Exception(f"Backtest record not found or could not be updated for ID: {backtest_id}")
+
+            logger.info(f"Backtest record: {backtest}")
             
             available_columns = get_available_columns(
                 conn,
@@ -147,7 +150,7 @@ def generate_backtest_script_task(self, backtest_id: UUID):
             # Update status to ready for validation
             update_backtest_status(conn, backtest_id, "ready_for_validation")
             logger.info(f"Updated status to ready_for_validation for backtest {backtest_id}")
-            
+
             # Queue validation task
             # from src.tasks.script_validation import validate_backtest_script
             # validate_backtest_script.delay(backtest_id=backtest_id)

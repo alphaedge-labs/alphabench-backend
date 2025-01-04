@@ -21,7 +21,7 @@ async def generate_strategy_title(strategy_description: str) -> str:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a trading strategy expert. Generate a short, concise title (max 50 characters) for the given trading strategy description."
+                    "content": "You are a trading strategy expert. Generate a short, concise title (max 50 characters) for the given trading strategy description. Do not enclose your response with quotation marks."
                 },
                 {
                     "role": "user",

@@ -49,7 +49,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     with get_db() as conn:
         user = execute_query_single(
             conn,
-            "SELECT * FROM users WHERE id = %s",
+            """
+            SELECT * 
+            FROM users 
+            WHERE id = %s
+            """,
             (user_id,)
         )
         
@@ -59,9 +63,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
 async def get_current_active_user(current_user = Depends(get_current_user)):
     """Check if the current user is active"""
-    if current_user.get("is_anonymous"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Anonymous user"
-        )
+    # if current_user.get("is_anonymous"):
+    #     raise HTTPException(
+    #         status_code=status.HTTP_400_BAD_REQUEST,
+    #         detail="Anonymous user"
+    #     )
     return current_user

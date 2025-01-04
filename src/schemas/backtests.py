@@ -120,3 +120,15 @@ class BacktestRequest(BacktestCreate):
 
 class BacktestResponse(BacktestRequest):
     pass
+
+class BacktestUpdate(BaseModel):
+    id: str
+    strategy_title: Optional[str] 
+    python_script_url: Optional[str]
+    validation_data_url: Optional[str]
+    full_data_url: Optional[str]
+    log_file_url: Optional[str]
+    report_url: Optional[str]
+    ready_for_report: bool
+    generated_report: bool
+    status: str
