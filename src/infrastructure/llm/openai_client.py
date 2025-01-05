@@ -64,7 +64,7 @@ async def generate_backtest_script(strategy_description: str, extra_message: str
             "   - The script must calculate moving averages, generate buy/sell signals, and backtest the strategy.\n"
             "   - Use only widely supported Python libraries such as pandas, numpy, argparse, and logging.\n"
             "   - Make sure that all the functions have all required arguments passed to them (for eg. for moving average strategies generate_signals(df, short_window, long_window)).\n"
-            "   - The script must have detailed logs on every sensible steps of the code such that a detailed strategy report can be generated in markdown format from this log file for the requested strategy and data.\n"
+            "   - The script must have detailed logs, info level, for every line of code code such that a detailed strategy report can be generated in markdown format from this log file for the requested strategy and data.\n"
             "\n"
             "3. **Code Quality**:\n"
             "   - Ensure the script is modular, production-ready, and free from syntax or runtime errors.\n"
