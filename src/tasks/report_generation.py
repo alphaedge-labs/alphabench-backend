@@ -11,6 +11,7 @@ from src.db.queries.backtests import (
 from src.infrastructure.storage.s3_client import S3Client
 from src.infrastructure.llm.openai_client import generate_backtest_report
 from src.utils.logger import get_logger
+import asyncio
 
 logger = get_logger(__name__)
 
@@ -33,7 +34,7 @@ class ReportGenerationTask(Task):
     base=ReportGenerationTask,
     name="src.tasks.report_generation.generate_report"
 )
-async def generate_report(self, backtest_id: UUID):
+def generate_report(self, backtest_id: UUID):
     """Generate backtest report from execution logs"""
     with get_db() as conn:
         try:
@@ -46,18 +47,18 @@ async def generate_report(self, backtest_id: UUID):
             s3_client = S3Client()
             
             # Download log file
-            log_content = await s3_client.get_file_content(backtest['log_file_url'])
+            log_content = asyncio.run(s3_client.get_file_content(backtest['log_file_url']))
             
             # Generate report using LLM
-            report_content = await generate_backtest_report(log_content)
+            report_content = asyncio.run(generate_backtest_report(log_content))
             
             # Upload report to S3
             report_key = f"{backtest_id}/report.md"
-            await s3_client.upload_file_content(
+            asyncio.run(s3_client.upload_file_content(
                 report_key,
                 report_content,
                 content_type="text/markdown"
-            )
+            ))
             
             # Update backtest record with report URL
             report_url = s3_client.get_file_url(report_key)

@@ -152,9 +152,9 @@ def generate_backtest_script_task(self, backtest_id: UUID):
             logger.info(f"Updated status to ready_for_validation for backtest {backtest_id}")
 
             # Queue validation task
-            # from src.tasks.script_validation import validate_backtest_script
-            # validate_backtest_script.delay(backtest_id=backtest_id)
-            # logger.info(f"Queued validation task for backtest {backtest_id}")
+            from src.tasks.script_validation import validate_backtest_script
+            validate_backtest_script.delay(backtest_id=backtest_id)
+            logger.info(f"Queued validation task for backtest {backtest_id}")
             
         except Exception as e:
             logger.error(f"Error in script generation for backtest {backtest_id}: {str(e)}", exc_info=True)

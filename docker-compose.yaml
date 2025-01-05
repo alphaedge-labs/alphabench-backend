@@ -24,6 +24,14 @@ services:
             retries: 3
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.7"
+                    memory: "1g"
+                reservations:
+                    cpus: "0.5"
+                    memory: "512m"
 
     celery_worker_script_generator:
         build:
@@ -45,6 +53,11 @@ services:
             retries: 3
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: "1g"
 
     celery_worker_script_validator:
         build:
@@ -66,6 +79,11 @@ services:
             retries: 3
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: "1g"
 
     celery_worker_backtest:
         build:
@@ -87,6 +105,11 @@ services:
             retries: 3
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: "1g"
 
     celery_worker_report:
         build:
@@ -108,6 +131,11 @@ services:
             retries: 3
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: "1g"
 
     celery_beat:
         build:
@@ -128,6 +156,11 @@ services:
             retries: 3
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.1"
+                    memory: "128m"
 
     alphabench__postgres:
         image: timescale/timescaledb:latest-pg15
@@ -152,6 +185,11 @@ services:
             retries: 3
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: "1g"
 
     alphabench__redis:
         image: redis:latest
@@ -172,6 +210,11 @@ services:
             - redis_data:/data
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.2"
+                    memory: "256m"
 
     celery_flower:
         image: mher/flower:latest
@@ -185,6 +228,11 @@ services:
             - alphabench__redis
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.1"
+                    memory: "128m"
 
     # alphabench__prometheus:
     #     image: prom/prometheus:v2.44.0

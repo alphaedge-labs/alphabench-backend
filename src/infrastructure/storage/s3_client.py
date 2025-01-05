@@ -110,3 +110,15 @@ class S3Client:
         except ClientError as e:
             # Log error here
             raise Exception(f"Failed to delete from S3: {str(e)}")
+
+    async def update_file(self, file_path: str, key: str) -> bool:
+            """Update file in S3 by replacing it with a new file"""
+            try:
+                # Attempt to delete the existing file
+                await self.delete_file(key)
+                # Upload the new file
+                await self.upload_file(file_path, key)
+                return True
+            except Exception as e:
+                # Log error here
+                raise Exception(f"Failed to update file in S3: {str(e)}")
