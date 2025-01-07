@@ -20,6 +20,7 @@ from src.db.queries.backtests import (
     get_backtest_by_id
 )
 from src.infrastructure.llm.openai_client import generate_strategy_title
+from src.infrastructure.llm.localllm_client import CustomLLMClient
 
 from src.api.services.websocket import manager
 
@@ -75,6 +76,8 @@ async def create_backtest(
     - Subscribed: n/day (based on plan)
     """
     # Generate strategy title using LLM
+    custom_llm = CustomLLMClient()
+
     strategy_title = await generate_strategy_title(backtest.strategy_description)
     
     # Create backtest request in database

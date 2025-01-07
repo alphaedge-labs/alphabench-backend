@@ -15,6 +15,7 @@ from src.db.queries.tick_data import (
 )
 from src.infrastructure.llm.openai_client import generate_backtest_script
 from src.infrastructure.storage.s3_client import S3Client
+# from src.infrastructure.llm.localllm_client import CustomLLMClient
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -67,8 +68,10 @@ def generate_backtest_script_task(self, backtest_id: UUID):
 
             # Generate script using LLM
             logger.info(f"Generating script using LLM for backtest {backtest_id}")
+            # custom_llm = CustomLLMClient()
 
             import asyncio
+
             script, data_points = asyncio.run(generate_backtest_script(
                 strategy_description=backtest['strategy_description'],
                 extra_message=extra_message
@@ -153,8 +156,8 @@ def generate_backtest_script_task(self, backtest_id: UUID):
 
             # Queue validation task
             from src.tasks.script_validation import validate_backtest_script
-            validate_backtest_script.delay(backtest_id=backtest_id)
-            logger.info(f"Queued validation task for backtest {backtest_id}")
+            # validate_backtest_script.delay(backtest_id=backtest_id)
+            # logger.info(f"Queued validation task for backtest {backtest_id}")
             
         except Exception as e:
             logger.error(f"Error in script generation for backtest {backtest_id}: {str(e)}", exc_info=True)

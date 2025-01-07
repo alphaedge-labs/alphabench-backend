@@ -277,3 +277,4 @@ volumes:
 networks:
     alphabench__network:
         driver: bridge
+        external: true

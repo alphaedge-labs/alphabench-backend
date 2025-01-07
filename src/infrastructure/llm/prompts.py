@@ -8,7 +8,7 @@ backtest_script_system_prompt = (
             "\n"
             "1. **Output Format**:\n"
             "   - Your response should only contain the generated Python script enclosed in triple backticks (` ```python ... ``` `).\n"
-            "   - After the script, provide the required data columns explicitly in this format: 'Required data columns: column1, column2, ...'.\n"
+            "   - After the script, provide the required data columns explicitly in this format: 'Required data columns: [column1, column2, ...]'\n"
             "   - Do not include any additional explanations, commentary, or extraneous text outside the specified format.\n"
             "\n"
             "2. **Script Requirements**:\n"

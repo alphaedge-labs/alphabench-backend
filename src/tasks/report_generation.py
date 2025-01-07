@@ -10,6 +10,7 @@ from src.db.queries.backtests import (
 )
 from src.infrastructure.storage.s3_client import S3Client
 from src.infrastructure.llm.openai_client import generate_backtest_report
+from src.infrastructure.llm.localllm_client import CustomLLMClient
 from src.utils.logger import get_logger
 import asyncio
 
@@ -50,6 +51,7 @@ def generate_report(self, backtest_id: UUID):
             log_content = asyncio.run(s3_client.get_file_content(backtest['log_file_url']))
             
             # Generate report using LLM
+            # custom_llm = CustomLLMClient()
             report_content = asyncio.run(generate_backtest_report(log_content))
             
             # Upload report to S3
