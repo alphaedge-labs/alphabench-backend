@@ -20,10 +20,20 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    worker_send_task_events=True,
+    task_send_sent_event=True,
     task_routes={
-        "src.tasks.script_generation.*": {"queue": "script_generation"},
-        "src.tasks.script_validation.*": {"queue": "script_validation"},
-        "src.tasks.backtest_execution.*": {"queue": "backtest_execution"},
-        "src.tasks.report_generation.*": {"queue": "report_generation"},
+        "src.tasks.script_generation.*": {
+            "queue": "script_generation"
+        },
+        "src.tasks.script_validation.*": {
+            "queue": "script_validation"
+        },
+        "src.tasks.backtest_execution.*": {
+            "queue": "backtest_execution"
+        },
+        "src.tasks.report_generation.*": {
+            "queue": "report_generation"
+        },
     }
 )

@@ -5,8 +5,19 @@ from fastapi.openapi.utils import get_openapi
 from prometheus_client import make_asgi_app
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 
-from src.api.middleware import AnonymousUserMiddleware, PrometheusMiddleware
-from src.api.routes import auth, backtests, reports, subscriptions, health, users
+from src.api.middleware import (
+    AnonymousUserMiddleware, 
+    PrometheusMiddleware
+)
+from src.api.routes import (
+    auth, 
+    backtests, 
+    reports, 
+    subscriptions, 
+    health, 
+    users, 
+    waitlist
+)
 from src.api.services.websocket import manager
 
 def custom_openapi():
@@ -106,6 +117,7 @@ app.include_router(reports.router)
 app.include_router(subscriptions.router)
 app.include_router(health.router)
 app.include_router(users.router)
+app.include_router(waitlist.router)
 
 # Create metrics endpoint
 metrics_app = make_asgi_app()

@@ -70,6 +70,30 @@ class S3Client:
             # Log error here
             raise Exception(f"Failed to upload to S3: {str(e)}")
 
+    @track_time(S3_OPERATION_DURATION.labels(operation='get_content'))
+    async def get_file_content(self, key: str) -> str:
+        """Get file content from S3 as string"""
+        try:
+            logger.info(f"Attempting to get content from bucket: {self.bucket_name}, key: {key}")
+            response = self.client.get_object(
+                Bucket=self.bucket_name,
+                Key=key
+            )
+            content = response['Body'].read().decode('utf-8')
+            logger.info(f"Successfully retrieved content from {key}")
+            S3_OPERATION_COUNT.labels(
+                operation='get_content',
+                status='success'
+            ).inc()
+            return content
+        except ClientError as e:
+            logger.error(f"S3 get content failed: {str(e)}")
+            S3_OPERATION_COUNT.labels(
+                operation='get_content',
+                status='error'
+            ).inc()
+            raise Exception(f"Failed to get content from S3: {str(e)}")
+
     async def download_file(self, key: str, local_path: str) -> bool:
         """Download file from S3"""
         try:

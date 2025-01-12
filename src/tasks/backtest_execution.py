@@ -10,11 +10,17 @@ import requests
 from src.infrastructure.queue.celery_app import celery_app
 from src.db.base import get_db
 from src.db.queries.backtests import (
-    get_backtest_by_id,
     update_backtest_status,
     update_backtest_urls
 )
 from src.infrastructure.storage.s3_client import S3Client
+from src.constants.backtests import (
+    BACKTEST_STATUS_EXECUTION_IN_PROGRESS,
+    BACKTEST_STATUS_EXECUTION_FAILED,
+    BACKTEST_STATUS_EXECUTION_SUCCESSFUL
+)
+from src.infrastructure.queue.instrumentation import track_celery_task
+
 
 import logging
 logger = logging.getLogger()
@@ -28,7 +34,7 @@ class BacktestExecutionTask(Task):
                 update_backtest_status(
                     conn,
                     backtest_id,
-                    "execution_failed",
+                    BACKTEST_STATUS_EXECUTION_FAILED,
                     str(exc)
                 )
 
@@ -37,12 +43,13 @@ class BacktestExecutionTask(Task):
     base=BacktestExecutionTask,
     name="src.tasks.backtest_execution.execute_backtest"
 )
+@track_celery_task("execution")
 def execute_backtest(self, backtest_id: UUID):
     """Execute the validated backtest script with full dataset"""
     with get_db() as conn:
         try:
             # Update status to executing
-            backtest = update_backtest_status(conn, backtest_id, "executing")
+            backtest = update_backtest_status(conn, backtest_id, BACKTEST_STATUS_EXECUTION_IN_PROGRESS)
             
             # Initialize S3 client
             s3_client = S3Client()
@@ -53,7 +60,8 @@ def execute_backtest(self, backtest_id: UUID):
                 script_path = os.path.join(temp_dir, "script.py")
                 data_path = os.path.join(temp_dir, "full_data.csv")
                 log_path = os.path.join(temp_dir, "backtest.log")
-                
+                logger.info(f"Created log file at: {log_path}")
+
                 async def download_files():
                     # Download script using HTTP
                     response = requests.get(backtest['python_script_url'])
@@ -73,6 +81,7 @@ def execute_backtest(self, backtest_id: UUID):
                 
                 # Run script with full dataset
                 with open(log_path, 'w') as log_file:
+                    logger.info(f"Running script with full dataset for backtest: {backtest_id} with script: 'python {script_path} --data {data_path} --log {log_path}'")
                     result = subprocess.run(
                         [
                             "python",
@@ -87,6 +96,10 @@ def execute_backtest(self, backtest_id: UUID):
                         timeout=1800  # 30 minute timeout
                     )
                 
+                with open(log_path, 'r') as log_file:
+                    log_contents = log_file.read()
+                    logger.info(f"Backtest log contents for {backtest_id}:\n{log_contents}")                
+
                 if result.returncode != 0:
                     raise Exception(f"Execution failed: {result.stderr}")
                 
@@ -112,7 +125,7 @@ def execute_backtest(self, backtest_id: UUID):
                 update_backtest_status(
                     conn,
                     backtest_id,
-                    "execution_successful"
+                    BACKTEST_STATUS_EXECUTION_SUCCESSFUL
                 )
                 
                 # Queue report generation
@@ -123,7 +136,7 @@ def execute_backtest(self, backtest_id: UUID):
             update_backtest_status(
                 conn,
                 backtest_id,
-                "execution_failed",
+                BACKTEST_STATUS_EXECUTION_FAILED,
                 str(e)
             )
             raise

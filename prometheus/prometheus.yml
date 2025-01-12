@@ -9,4 +9,15 @@ scrape_configs:
 
     - job_name: "prometheus"
       static_configs:
-          - targets: ["localhost:9090"]
+          - targets: ["alphabench__prometheus:9090"]
+
+    - job_name: "celery"
+      static_configs:
+          - targets: [
+              "celery_worker_script_generator:8081",
+              "celery_worker_script_validator:8082",
+              "celery_worker_backtest:8083",
+              "celery_worker_report_generator:8084"
+            ]
+      metrics_path: '/metrics'
+      scrape_interval: 15s

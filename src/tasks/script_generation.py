@@ -5,7 +5,6 @@ from uuid import UUID
 from src.infrastructure.queue.celery_app import celery_app
 from src.db.base import get_db
 from src.db.queries.backtests import (
-    get_backtest_by_id,
     update_backtest_status,
     update_backtest_urls
 )
@@ -16,6 +15,13 @@ from src.db.queries.tick_data import (
 from src.infrastructure.llm.openai_client import generate_backtest_script
 from src.infrastructure.storage.s3_client import S3Client
 # from src.infrastructure.llm.localllm_client import CustomLLMClient
+
+from src.constants.backtests import (
+    BACKTEST_STATUS_READY_FOR_VALIDATION,
+    BACKTEST_STATUS_SCRIPT_GENERATION_FAILED,
+    BACKTEST_STATUS_SCRIPT_GENERATION_IN_PROGRESS,
+)
+from src.infrastructure.queue.instrumentation import track_celery_task
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -30,7 +36,7 @@ class ScriptGenerationTask(Task):
                 update_backtest_status(
                     conn,
                     backtest_id,
-                    "failed",
+                    BACKTEST_STATUS_SCRIPT_GENERATION_FAILED,
                     str(exc)
                 )
 
@@ -39,6 +45,7 @@ class ScriptGenerationTask(Task):
     base=ScriptGenerationTask,
     name="src.tasks.script_generation.generate_backtest_script"
 )
+@track_celery_task("script_generation")
 def generate_backtest_script_task(self, backtest_id: UUID):
     """Generate backtest script and prepare data files"""
     logger.info(f"Starting script generation for backtest {backtest_id}")
@@ -49,7 +56,7 @@ def generate_backtest_script_task(self, backtest_id: UUID):
 
             logger.info(f"Backtest ID: {backtest_id}")
 
-            backtest = update_backtest_status(conn, backtest_id, "generating_script")
+            backtest = update_backtest_status(conn, backtest_id, BACKTEST_STATUS_SCRIPT_GENERATION_IN_PROGRESS)
 
             if not backtest:
                 raise Exception(f"Backtest record not found or could not be updated for ID: {backtest_id}")
@@ -151,20 +158,20 @@ def generate_backtest_script_task(self, backtest_id: UUID):
             logger.info(f"Files uploaded successfully for backtest {backtest_id}")
             
             # Update status to ready for validation
-            update_backtest_status(conn, backtest_id, "ready_for_validation")
+            update_backtest_status(conn, backtest_id, BACKTEST_STATUS_READY_FOR_VALIDATION)
             logger.info(f"Updated status to ready_for_validation for backtest {backtest_id}")
 
             # Queue validation task
             from src.tasks.script_validation import validate_backtest_script
-            # validate_backtest_script.delay(backtest_id=backtest_id)
-            # logger.info(f"Queued validation task for backtest {backtest_id}")
+            validate_backtest_script.delay(backtest_id=backtest_id)
+            logger.info(f"Queued validation task for backtest {backtest_id}")
             
         except Exception as e:
             logger.error(f"Error in script generation for backtest {backtest_id}: {str(e)}", exc_info=True)
             update_backtest_status(
                 conn,
                 backtest_id,
-                "failed",
+                BACKTEST_STATUS_SCRIPT_GENERATION_FAILED,
                 str(e)
             )
             raise

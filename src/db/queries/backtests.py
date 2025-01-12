@@ -68,7 +68,7 @@ def get_backtest_by_id(conn, backtest_id: UUID) -> Optional[dict]:
         logger.error(f"Error in get_backtest_by_id: {e}")
         return None
 
-def update_backtest_status(conn, backtest_id: UUID, status: str, error_message: Optional[str] = None) -> dict:
+def update_backtest_status(conn, backtest_id: UUID, status: str, error_message: Optional[str] = None, ready_for_report: bool = False, generated_report: bool = False) -> dict:
     """Update backtest status and error message"""
     try:
         result = execute_query_single(
@@ -77,11 +77,13 @@ def update_backtest_status(conn, backtest_id: UUID, status: str, error_message: 
             UPDATE backtest_requests
             SET status = %s,
                 error_message = %s,
+                ready_for_report = %s,
+                generated_report = %s,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = %s
             RETURNING *
             """,
-            (status, error_message, backtest_id)
+            (status, error_message, ready_for_report, generated_report, backtest_id)
         )
         conn.commit()
 
@@ -138,3 +140,60 @@ def update_backtest_urls(
     except Exception as e:
         conn.rollback()
         logger.warning(f'Error updating backtest file: {e}')
+
+def get_grouped_backtests(conn, user_id: UUID) -> dict:
+    """Get backtests grouped by time periods"""
+    return execute_query_single(
+        conn,
+        """
+        WITH grouped_backtests AS (
+            SELECT 
+                id,
+                strategy_title as name,
+                DATE(created_at) as date,
+                CASE
+                    WHEN created_at >= NOW() - INTERVAL '7 days' THEN 'thisWeek'
+                    WHEN created_at >= NOW() - INTERVAL '30 days' THEN 'lastMonth'
+                    ELSE 'older'
+                END as time_group
+            FROM backtest_requests
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+        )
+        SELECT
+            jsonb_build_object(
+                'thisWeek', COALESCE(
+                    jsonb_agg(
+                        jsonb_build_object(
+                            'id', id,
+                            'name', name,
+                            'date', TO_CHAR(date, 'YYYY-MM-DD')
+                        )
+                    ) FILTER (WHERE time_group = 'thisWeek'),
+                    '[]'
+                ),
+                'lastMonth', COALESCE(
+                    jsonb_agg(
+                        jsonb_build_object(
+                            'id', id,
+                            'name', name,
+                            'date', TO_CHAR(date, 'YYYY-MM-DD')
+                        )
+                    ) FILTER (WHERE time_group = 'lastMonth'),
+                    '[]'
+                ),
+                'older', COALESCE(
+                    jsonb_agg(
+                        jsonb_build_object(
+                            'id', id,
+                            'name', name,
+                            'date', TO_CHAR(date, 'YYYY-MM-DD')
+                        )
+                    ) FILTER (WHERE time_group = 'older'),
+                    '[]'
+                )
+            ) as result
+        FROM grouped_backtests
+        """,
+        (user_id,)
+    )

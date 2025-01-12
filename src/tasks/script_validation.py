@@ -10,10 +10,16 @@ import asyncio
 from src.infrastructure.queue.celery_app import celery_app
 from src.db.base import get_db
 from src.db.queries.backtests import (
-    get_backtest_by_id,
     update_backtest_status
 )
 from src.infrastructure.storage.s3_client import S3Client
+
+from src.constants.backtests import (
+    BACKTEST_STATUS_VALIDATION_FAILED,
+    BACKTEST_STATUS_VALIDATION_IN_PROGRESS,
+    BACKTEST_STATUS_VALIDATION_PASSED
+)
+from src.infrastructure.queue.instrumentation import track_celery_task
 
 import logging
 logger = logging.getLogger()
@@ -27,7 +33,7 @@ class ScriptValidationTask(Task):
                 update_backtest_status(
                     conn,
                     backtest_id,
-                    "validation_failed",
+                    BACKTEST_STATUS_VALIDATION_FAILED,
                     str(exc)
                 )
 
@@ -36,12 +42,13 @@ class ScriptValidationTask(Task):
     base=ScriptValidationTask,
     name="src.tasks.script_validation.validate_backtest_script"
 )
+@track_celery_task("validation")
 def validate_backtest_script(self, backtest_id: UUID):
     """Validate the generated backtest script"""
     with get_db() as conn:
         try:
             # Update status to validating
-            backtest = update_backtest_status(conn, backtest_id, "validating")
+            backtest = update_backtest_status(conn, backtest_id, BACKTEST_STATUS_VALIDATION_IN_PROGRESS)
             
             # Create temporary directory
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -82,7 +89,12 @@ def validate_backtest_script(self, backtest_id: UUID):
                 logger.info(f"Successfully validated script for backtest: {backtest_id}")
 
                 # Update status to validation successful
-                update_backtest_status(conn, backtest_id, "validation_successful")
+                update_backtest_status(
+                    conn, 
+                    backtest_id, 
+                    BACKTEST_STATUS_VALIDATION_PASSED, 
+                    ready_for_report=True
+                )
                 
                 # Queue full backtest execution
                 from src.tasks.backtest_execution import execute_backtest
@@ -93,7 +105,7 @@ def validate_backtest_script(self, backtest_id: UUID):
             update_backtest_status(
                 conn,
                 backtest_id,
-                "validation_failed",
+                BACKTEST_STATUS_VALIDATION_FAILED,
                 str(e)
             )
             raise
