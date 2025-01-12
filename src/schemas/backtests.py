@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import date, datetime
 from uuid import UUID
 
@@ -120,3 +120,25 @@ class BacktestRequest(BacktestCreate):
 
 class BacktestResponse(BacktestRequest):
     pass
+
+class BacktestUpdate(BaseModel):
+    id: str
+    strategy_title: Optional[str] 
+    python_script_url: Optional[str]
+    validation_data_url: Optional[str]
+    full_data_url: Optional[str]
+    log_file_url: Optional[str]
+    report_url: Optional[str]
+    ready_for_report: bool
+    generated_report: bool
+    status: str
+
+class BacktestTimeGroup(BaseModel):
+    id: UUID
+    name: str
+    date: str
+
+class GroupedBacktestsResponse(BaseModel):
+    thisWeek: List[BacktestTimeGroup]
+    lastMonth: List[BacktestTimeGroup]
+    older: List[BacktestTimeGroup]

@@ -2,6 +2,9 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 
 class Settings(BaseSettings):
+    # FastAPI
+    PORT: int = 8000
+
     # Database settings
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
@@ -22,6 +25,11 @@ class Settings(BaseSettings):
 
     # OpenAI settings
     OPENAI_API_KEY: str
+    OPENAI_MODEL: str
+
+    # Local running llm model
+    LOCAL_LLM_SERVER_URL: str
+    LOCAL_LLM_MODEL_NAME: str
 
     # Google OAuth settings
     GOOGLE_CLIENT_ID: str

@@ -4,16 +4,15 @@ from datetime import datetime, timezone
 
 from src.db.base import execute_query, execute_query_single
 
-def get_subscription_plans(db) -> List[dict]:
+def get_subscription_plans(conn) -> List[dict]:
     """Get all available subscription plans"""
     return execute_query(
-        db,
+        conn,
         """
         SELECT 
             id, name, description, price_usd, reports_per_day,
-            created_at, updated_at
+            created_at
         FROM subscription_plans
-        WHERE is_active = true
         ORDER BY price_usd ASC
         """
     )

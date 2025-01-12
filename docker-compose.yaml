@@ -1,6 +1,8 @@
 services:
     alphabench__fastapi:
-        build: .
+        build:
+            context: .
+            dockerfile: Dockerfile # Use the main Dockerfile for FastAPI
         image: alphabench__fastapi:latest
         container_name: alphabench__fastapi
         command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
@@ -9,9 +11,9 @@ services:
         ports:
             - "8000:8000"
         environment:
-            - ENV_FILE=.env
+            - ENV_FILE=.env.prod
         env_file:
-            - .env
+            - .env.prod
         depends_on:
             - alphabench__postgres
             - alphabench__redis
@@ -22,15 +24,27 @@ services:
             retries: 3
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.7"
+                    memory: "1g"
+                reservations:
+                    cpus: "0.5"
+                    memory: "512m"
 
     celery_worker_script_generator:
-        build: .
+        build:
+            context: .
+            dockerfile: Dockerfile.worker # Use a separate Dockerfile for workers
         container_name: celery_worker_script_generator
-        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info --queues=script_generation
+        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info -E --queues=script_generation --hostname=script_generator@%h
         volumes:
             - .:/app
+        ports:
+            - "8081:8081"
         env_file:
-            - .env
+            - .env.prod
         depends_on:
             - alphabench__redis
             - alphabench__postgres
@@ -41,15 +55,24 @@ services:
             retries: 3
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: "768m"
 
     celery_worker_script_validator:
-        build: .
+        build:
+            context: .
+            dockerfile: Dockerfile.worker # Use a separate Dockerfile for workers
         container_name: celery_worker_script_validator
-        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info --queues=script_validation
+        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info -E --queues=script_validation --hostname=script_validator@%h
         volumes:
             - .:/app
         env_file:
-            - .env
+            - .env.prod
+        ports:
+            - "8082:8082"
         depends_on:
             - alphabench__redis
             - alphabench__postgres
@@ -60,15 +83,24 @@ services:
             retries: 3
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: "512m"
 
     celery_worker_backtest:
-        build: .
+        build:
+            context: .
+            dockerfile: Dockerfile.worker # Use a separate Dockerfile for workers
         container_name: celery_worker_backtest
-        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info --queues=backtest_execution
+        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info -E --queues=backtest_execution --hostname=backtest_execution@%h
         volumes:
             - .:/app
+        ports:
+            - "8083:8083"
         env_file:
-            - .env
+            - .env.prod
         depends_on:
             - alphabench__redis
             - alphabench__postgres
@@ -79,15 +111,24 @@ services:
             retries: 3
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: "768m"
 
-    celery_worker_report:
-        build: .
-        container_name: celery_worker_report
-        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info --queues=report_generation
+    celery_worker_report_generator:
+        build:
+            context: .
+            dockerfile: Dockerfile.worker # Use a separate Dockerfile for workers
+        container_name: celery_worker_report_generator
+        command: celery -A src.infrastructure.queue.celery_app worker --loglevel=info -E --queues=report_generation --hostname=report_generator@%h
         volumes:
             - .:/app
         env_file:
-            - .env
+            - .env.prod
+        ports:
+            - "8084:8084"
         depends_on:
             - alphabench__redis
             - alphabench__postgres
@@ -98,24 +139,11 @@ services:
             retries: 3
         networks:
             - alphabench__network
-
-    celery_beat:
-        build: .
-        container_name: celery_beat
-        command: celery -A src.infrastructure.queue.celery_app beat --loglevel=info
-        volumes:
-            - .:/app
-        env_file:
-            - .env
-        depends_on:
-            - alphabench__redis
-        healthcheck:
-            test: ["CMD", "pgrep", "celery"]
-            interval: 30s
-            timeout: 10s
-            retries: 3
-        networks:
-            - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: "512m"
 
     alphabench__postgres:
         image: timescale/timescaledb:latest-pg15
@@ -140,6 +168,11 @@ services:
             retries: 3
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: "1.5g"
 
     alphabench__redis:
         image: redis:latest
@@ -160,6 +193,39 @@ services:
             - redis_data:/data
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.2"
+                    memory: "256m"
+
+    celery_flower:
+        image: mher/flower:latest
+        container_name: celery_flower
+        command: >
+            celery 
+            --broker=redis://:${REDIS_PASSWORD}@alphabench__redis:6379/0
+            flower
+            --port=5555 
+            --address=0.0.0.0
+            --enable_events=True
+            --persistent=True
+            --url_prefix=flower
+        ports:
+            - "5555:5555"
+        env_file:
+            - .env.prod
+        environment:
+            - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@alphabench__redis:6379/0
+        depends_on:
+            - alphabench__redis
+        networks:
+            - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.1"
+                    memory: "128m"
 
     alphabench__prometheus:
         image: prom/prometheus:v2.44.0
@@ -178,6 +244,11 @@ services:
             retries: 3
         networks:
             - alphabench__network
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: "512m"
 
     alphabench__grafana:
         image: grafana/grafana:9.5.2
@@ -186,6 +257,11 @@ services:
             - "3000:3000"
         volumes:
             - grafana_data:/var/lib/grafana
+        env_file:
+            - .env.prod
+        environment:
+            - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
+            - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
         healthcheck:
             test:
                 ["CMD", "wget", "--spider", "http://localhost:3000/api/health"]
@@ -194,7 +270,11 @@ services:
             retries: 3
         networks:
             - alphabench__network
-
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.3"
+                    memory: "256m"
 volumes:
     postgres_data:
     redis_data:
@@ -204,3 +284,4 @@ volumes:
 networks:
     alphabench__network:
         driver: bridge
+        external: true

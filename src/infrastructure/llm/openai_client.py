@@ -1,5 +1,7 @@
 from openai import AsyncOpenAI
-from typing import Optional
+from logging import getLogger
+import re
+import json
 
 from src.config.settings import settings
 from src.utils.metrics import (
@@ -7,8 +9,21 @@ from src.utils.metrics import (
     LLM_REQUEST_DURATION,
     track_time
 )
+from src.infrastructure.llm.prompts import (
+    # Backtest Script Prompts
+    backtest_script_system_prompt,
+    backtest_script_system_prompt_v3,
+    backtest_script_system_prompt_v4,
+    backtest_script_system_prompt_with_dictionary,
+    # Strategy Title Prompts
+    strategy_title_system_prompt,
+    # Backtest Report Prompts
+    backtest_report_system_prompt,
+    backtest_report_system_prompt_v2
+)
 
 client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+logger = getLogger()
 
 @track_time(LLM_REQUEST_DURATION.labels(operation='title_generation'))
 async def generate_strategy_title(strategy_description: str) -> str:
@@ -19,7 +34,7 @@ async def generate_strategy_title(strategy_description: str) -> str:
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a trading strategy expert. Generate a short, concise title (max 50 characters) for the given trading strategy description."
+                    "content": strategy_title_system_prompt
                 },
                 {
                     "role": "user",
@@ -42,38 +57,58 @@ async def generate_strategy_title(strategy_description: str) -> str:
         # Log error here
         return "Custom Trading Strategy"  # Fallback title
 
-async def generate_backtest_script(strategy_description: str) -> tuple[str, list[str]]:
+async def generate_backtest_script(strategy_description: str, extra_message: str) -> tuple[str, list[str]]:
     """Generate Python script and required data points for the strategy"""
     try:
+        system_prompt = backtest_script_system_prompt_with_dictionary
+        
+        if extra_message:
+            system_prompt = system_prompt + f"\n{extra_message}"
+
+        logger.info(f"Generated system prompt: {system_prompt}")
+
         response = await client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[
-                {
-                    "role": "system",
-                    "content": """You are a Python trading strategy expert. Generate a detailed backtesting script with comprehensive logging for the given strategy description. 
-                    The script should:
-                    1. Accept a CSV file path as --data argument
-                    2. Include detailed logging of entry/exit points, reasons, and performance metrics
-                    3. Return a list of required data points
-                    Format: Return both the Python script and a list of required data columns."""
-                },
-                {
-                    "role": "user",
-                    "content": strategy_description
-                }
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": strategy_description}
             ],
             max_tokens=2000,
-            temperature=0.2
+            temperature=0.2,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "backtest_script_response",  # Name of the schema
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "script": {"type": "string"},  # Python script as a string
+                            "data_columns": {  # List of required data columns
+                                "type": "array",
+                                "items": {"type": "string"}
+                            }
+                        },
+                        "required": ["script", "data_columns"],
+                        "additionalProperties": False  # Enforce strict schema compliance
+                    }
+                }
+            }
         )
         
-        content = response.choices[0].message.content
-        
-        # Parse response to separate script and data points
-        # Implementation depends on how we structure the LLM's response
-        script = "# Generated script\n" + content  # Placeholder
-        data_points = ["close", "volume"]  # Placeholder
-        
-        return script, data_points
+        llm_response = response.choices[0].message.content
+        content = json.loads(llm_response)
+
+        logger.info(f'Response content: {content}')
+
+        # Finding script
+        script_match = re.search(r'```python\n(.*?)```', content['script'], re.DOTALL)
+        script = script_match.group(1).strip() if script_match else None
+
+        # Fetching data columns
+        data_columns = content['data_columns']
+
+        return script, data_columns
     except Exception as e:
         # Log error here
         raise Exception(f"Failed to generate backtest script: {str(e)}")
@@ -86,14 +121,7 @@ async def generate_backtest_report(log_content: str) -> str:
             messages=[
                 {
                     "role": "system",
-                    "content": """You are a trading strategy analyst. Generate a detailed markdown report from the backtest logs.
-                    The report should include:
-                    1. Strategy Performance Summary
-                    2. Key Metrics (Returns, Sharpe Ratio, etc.)
-                    3. Entry/Exit Analysis
-                    4. Risk Analysis
-                    5. Recommendations for Improvement
-                    Format the report in clean, well-structured markdown."""
+                    "content": backtest_report_system_prompt_v2
                 },
                 {
                     "role": "user",
@@ -108,3 +136,37 @@ async def generate_backtest_report(log_content: str) -> str:
     except Exception as e:
         # Log error here
         raise Exception(f"Failed to generate backtest report: {str(e)}")
+
+async def generate_fixed_script(original_script: str, error_message: str) -> str:
+    """Generate a fixed Python script based on the original script and error message"""
+    try:
+        system_prompt = (
+            "You are a Python expert. Your task is to fix the following Python script based on the provided error message. "
+            "Ensure that the new script doesn't need any other data input than original script.\n\n"
+            "Original Script:\n"
+            f"{original_script}\n\n"
+            "Error Message:\n"
+            f"{error_message}\n\n"
+            "Please provide the corrected script only in response."
+        )
+
+        response = await client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                }
+            ],
+            max_tokens=2000,
+            temperature=0.2
+        )
+        
+        content = response.choices[0].message.content.strip()
+
+        script_match = re.search(r'```python\n(.*?)```', content, re.DOTALL)
+        script = script_match.group(1).strip() if script_match else None
+
+        return script
+    except Exception as e:
+        raise Exception(f"Failed to generate fixed script: {str(e)}")

@@ -3,7 +3,10 @@ from psycopg2.extras import RealDictCursor
 from contextlib import contextmanager
 from typing import Generator
 
+from logging import getLogger
 from src.config.settings import settings
+
+logger = getLogger()
 
 def get_db_connection():
     """Create a database connection"""
@@ -33,12 +36,16 @@ def execute_query(conn, query: str, params: tuple = None):
             return cur.fetchall()
         except psycopg2.ProgrammingError:
             return None
+        finally:
+            cur.close()
 
 def execute_query_single(conn, query: str, params: tuple = None):
-    """Execute a query and return a single result"""
+    """Execute a query and return a single result"""   
     with conn.cursor() as cur:
         cur.execute(query, params)
         try:
             return cur.fetchone()
         except psycopg2.ProgrammingError:
             return None
+        finally:
+            cur.close()
