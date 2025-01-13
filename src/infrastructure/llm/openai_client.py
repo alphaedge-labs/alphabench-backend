@@ -15,11 +15,13 @@ from src.infrastructure.llm.prompts import (
     backtest_script_system_prompt_v3,
     backtest_script_system_prompt_v4,
     backtest_script_system_prompt_with_dictionary,
+    backtest_script_system_prompt_with_template_code,
     # Strategy Title Prompts
     strategy_title_system_prompt,
     # Backtest Report Prompts
     backtest_report_system_prompt,
-    backtest_report_system_prompt_v2
+    backtest_report_system_prompt_v2,
+    backtest_report_system_prompt_v3
 )
 
 client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
@@ -97,6 +99,9 @@ async def generate_backtest_script(strategy_description: str, extra_message: str
         )
         
         llm_response = response.choices[0].message.content
+
+        logger.info(f'Response content: {llm_response}')
+
         content = json.loads(llm_response)
 
         logger.info(f'Response content: {content}')
@@ -121,7 +126,7 @@ async def generate_backtest_report(log_content: str) -> str:
             messages=[
                 {
                     "role": "system",
-                    "content": backtest_report_system_prompt_v2
+                    "content": backtest_report_system_prompt_v3
                 },
                 {
                     "role": "user",

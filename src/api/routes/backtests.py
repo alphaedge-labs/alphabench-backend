@@ -1,6 +1,6 @@
 # src/api/routes/backtests.py
 import json
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List
 from uuid import UUID
 from pydantic import BaseModel
@@ -20,7 +20,8 @@ from src.db.queries.backtests import (
     create_backtest_request,
     get_user_backtests,
     get_backtest_by_id,
-    get_grouped_backtests
+    get_grouped_backtests,
+    get_grouped_backtests_search
 )
 from src.infrastructure.llm.openai_client import generate_strategy_title
 from src.infrastructure.llm.localllm_client import CustomLLMClient
@@ -85,6 +86,9 @@ async def create_backtest(
 
     strategy_title = await generate_strategy_title(backtest.strategy_description)
     
+    # Sanitize strategy title by removing any leading or trailing whitespace
+    strategy_title = strategy_title.strip('"')
+
     # Create backtest request in database
     backtest_dict = backtest.model_dump()
     backtest_dict['strategy_title'] = strategy_title
@@ -281,3 +285,44 @@ async def get_backtest_report(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Failed to fetch report"
         )
+    
+@router.get(
+    "/past/search",
+    response_model=GroupedBacktestsResponse,
+    responses={
+        200: {
+            "description": "Search results for past backtests grouped by time periods",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "thisWeek": [
+                            {
+                                "id": "123e4567-e89b-12d3-a456-426614174000",
+                                "name": "Moving Average Strategy #1",
+                                "date": "2024-03-20"
+                            }
+                        ],
+                        "lastMonth": [],
+                        "older": []
+                    }
+                }
+            }
+        }
+    }
+)
+async def search_past_backtests(
+    q: str = Query(..., description="Search term to filter backtests"),
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_db)
+) -> GroupedBacktestsResponse:
+    """
+    Search past backtests for the current user and return results grouped by time periods.
+    Searches through strategy titles, descriptions, and instrument symbols.
+    Results are grouped into:
+    - thisWeek: Matching backtests from this week
+    - lastMonth: Matching backtests from this month but before this week
+    - older: Matching backtests before the current month
+    """
+    with db as conn:
+        result = get_grouped_backtests_search(conn, current_user['id'], q)
+        return GroupedBacktestsResponse(**result['result'])

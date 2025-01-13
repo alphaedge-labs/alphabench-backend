@@ -197,3 +197,71 @@ def get_grouped_backtests(conn, user_id: UUID) -> dict:
         """,
         (user_id,)
     )
+
+def get_grouped_backtests_search(conn, user_id: UUID, search_term: str) -> dict:
+    """Get backtests grouped by time periods with search functionality"""
+    return execute_query_single(
+        conn,
+        """
+        WITH grouped_backtests AS (
+            SELECT 
+                id,
+                strategy_title as name,
+                DATE(created_at) as date,
+                CASE
+                    WHEN DATE(created_at) >= DATE_TRUNC('week', CURRENT_DATE) THEN 'thisWeek'
+                    WHEN DATE(created_at) >= DATE_TRUNC('month', CURRENT_DATE) 
+                         AND DATE(created_at) < DATE_TRUNC('week', CURRENT_DATE) THEN 'lastMonth'
+                    ELSE 'older'
+                END as time_group
+            FROM backtest_requests
+            WHERE user_id = %s
+            AND (
+                LOWER(strategy_title) LIKE LOWER(%s)
+                OR LOWER(strategy_description) LIKE LOWER(%s)
+                OR LOWER(instrument_symbol) LIKE LOWER(%s)
+            )
+            ORDER BY created_at DESC
+        )
+        SELECT
+            jsonb_build_object(
+                'thisWeek', COALESCE(
+                    jsonb_agg(
+                        jsonb_build_object(
+                            'id', id,
+                            'name', name,
+                            'date', TO_CHAR(date, 'YYYY-MM-DD')
+                        )
+                    ) FILTER (WHERE time_group = 'thisWeek'),
+                    '[]'
+                ),
+                'lastMonth', COALESCE(
+                    jsonb_agg(
+                        jsonb_build_object(
+                            'id', id,
+                            'name', name,
+                            'date', TO_CHAR(date, 'YYYY-MM-DD')
+                        )
+                    ) FILTER (WHERE time_group = 'lastMonth'),
+                    '[]'
+                ),
+                'older', COALESCE(
+                    jsonb_agg(
+                        jsonb_build_object(
+                            'id', id,
+                            'name', name,
+                            'date', TO_CHAR(date, 'YYYY-MM-DD')
+                        )
+                    ) FILTER (WHERE time_group = 'older'),
+                    '[]'
+                )
+            ) as result
+        FROM grouped_backtests
+        """,
+        (
+            user_id,
+            f"%{search_term}%",
+            f"%{search_term}%",
+            f"%{search_term}%"
+        )
+    )
