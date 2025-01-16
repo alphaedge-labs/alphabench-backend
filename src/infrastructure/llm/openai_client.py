@@ -11,17 +11,10 @@ from src.utils.metrics import (
 )
 from src.infrastructure.llm.prompts import (
     # Backtest Script Prompts
-    backtest_script_system_prompt,
-    backtest_script_system_prompt_v3,
-    backtest_script_system_prompt_v4,
-    backtest_script_system_prompt_with_dictionary,
-    backtest_script_system_prompt_with_template_code,
     backtest_script_system_prompt_vectorbt,
     # Strategy Title Prompts
     strategy_title_system_prompt,
     # Backtest Report Prompts
-    backtest_report_system_prompt,
-    backtest_report_system_prompt_v2,
     backtest_report_system_prompt_v3
 )
 

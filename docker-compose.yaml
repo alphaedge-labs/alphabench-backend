@@ -27,11 +27,11 @@ services:
         deploy:
             resources:
                 limits:
-                    cpus: "0.7"
-                    memory: "1g"
-                reservations:
-                    cpus: "0.5"
+                    cpus: "0.4"
                     memory: "512m"
+                reservations:
+                    cpus: "0.2"
+                    memory: "256m"
 
     celery_worker_script_generator:
         build:
@@ -58,8 +58,8 @@ services:
         deploy:
             resources:
                 limits:
-                    cpus: "0.5"
-                    memory: "768m"
+                    cpus: "0.3"
+                    memory: "512m"
 
     celery_worker_script_validator:
         build:
@@ -86,8 +86,8 @@ services:
         deploy:
             resources:
                 limits:
-                    cpus: "0.5"
-                    memory: "512m"
+                    cpus: "0.2"
+                    memory: "384m"
 
     celery_worker_backtest:
         build:
@@ -114,8 +114,8 @@ services:
         deploy:
             resources:
                 limits:
-                    cpus: "0.5"
-                    memory: "768m"
+                    cpus: "0.3"
+                    memory: "512m"
 
     celery_worker_report_generator:
         build:
@@ -142,8 +142,8 @@ services:
         deploy:
             resources:
                 limits:
-                    cpus: "0.5"
-                    memory: "512m"
+                    cpus: "0.2"
+                    memory: "384m"
 
     alphabench__postgres:
         image: timescale/timescaledb:latest-pg15
@@ -171,8 +171,8 @@ services:
         deploy:
             resources:
                 limits:
-                    cpus: "0.5"
-                    memory: "1.5g"
+                    cpus: "0.3"
+                    memory: "1024m"
 
     alphabench__redis:
         image: redis:latest
@@ -196,8 +196,8 @@ services:
         deploy:
             resources:
                 limits:
-                    cpus: "0.2"
-                    memory: "256m"
+                    cpus: "0.1"
+                    memory: "192m"
 
     celery_flower:
         image: mher/flower:latest
@@ -224,8 +224,8 @@ services:
         deploy:
             resources:
                 limits:
-                    cpus: "0.1"
-                    memory: "128m"
+                    cpus: "0.05"
+                    memory: "96m"
 
     alphabench__prometheus:
         image: prom/prometheus:v2.44.0
@@ -247,8 +247,8 @@ services:
         deploy:
             resources:
                 limits:
-                    cpus: "0.5"
-                    memory: "512m"
+                    cpus: "0.2"
+                    memory: "384m"
 
     alphabench__grafana:
         image: grafana/grafana:9.5.2
@@ -273,7 +273,7 @@ services:
         deploy:
             resources:
                 limits:
-                    cpus: "0.3"
+                    cpus: "0.15"
                     memory: "256m"
 volumes:
     postgres_data:
