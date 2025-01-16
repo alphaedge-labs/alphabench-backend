@@ -1,74 +1,63 @@
 #!/bin/bash
 
-# Exit on any error
-set -e
+# Function to log messages with timestamps
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1"
+}
 
-# Define variables
-BACKUP_FILE="backup.sql"
-NETWORK_NAME="alphabench__network"
+# Build all containers
+log "🚀 Starting the build process..."
+docker compose build
+if [ $? -ne 0 ]; then
+    log "❌ Build failed"
+    exit 1
+fi
+log "✅ Build completed successfully!"
 
-echo "🚀 Starting Deployment Script..."
+# Stop all containers except Postgres
+log "🛑 Stopping all containers except PostgreSQL..."
+docker compose stop \
+    alphabench__redis \
+    alphabench__fastapi \
+    celery_worker_script_generator \
+    celery_worker_script_validator \
+    celery_worker_backtest \
+    celery_worker_report_generator \
+    celery_flower \
+    alphabench__prometheus \
+    alphabench__grafana
 
-# Step 1: Backup Database
-echo "📦 Backing up database..."
-docker exec alphabench__postgres pg_dump -U $POSTGRES_USER $POSTGRES_DB > $BACKUP_FILE
-echo "✅ Database backup saved to $BACKUP_FILE."
+# Start containers in sequence
+log "🔄 Starting containers in sequence..."
 
-# Step 2: Stop and Remove Existing Containers
-echo "🛑 Stopping all running containers..."
-docker compose down --volumes
-echo "🧹 Removed containers, networks, and volumes."
-
-# Step 3: Recreate Docker Network
-echo "🌐 Creating Docker network..."
-docker network create $NETWORK_NAME || echo "ℹ️ Network already exists, skipping creation."
-echo "✅ Docker network created."
-
-# Step 4: Deploy Services in Logical Order
-
-# Step 4.1: Start Database Service
-echo "📊 Starting PostgreSQL service..."
-docker compose up -d alphabench__postgres
-echo "⏳ Waiting for PostgreSQL to initialize..."
-until docker exec alphabench__postgres pg_isready -U $POSTGRES_USER; do
-  sleep 2
-done
-echo "✅ PostgreSQL is ready."
-
-# Step 4.2: Restore Database Backup
-echo "🛠️ Restoring database from backup..."
-docker exec -i alphabench__postgres psql -U $POSTGRES_USER $POSTGRES_DB < $BACKUP_FILE
-echo "✅ Database restored from $BACKUP_FILE."
-
-# Step 4.3: Start Redis Service
-echo "📡 Starting Redis service..."
+# 1. Start Redis
+log "📦 Starting Redis..."
 docker compose up -d alphabench__redis
-echo "⏳ Waiting for Redis to be ready..."
-until docker exec alphabench__redis redis-cli -a $REDIS_PASSWORD ping | grep -q "PONG"; do
-  sleep 2
-done
-echo "✅ Redis is ready."
+sleep 5  # Brief pause to allow Redis to initialize
 
-# Step 4.4: Start Backend and Worker Services
-echo "🖥️ Starting FastAPI service..."
+# 2. Start FastAPI
+log "🚀 Starting FastAPI service..."
 docker compose up -d alphabench__fastapi
-echo "✅ FastAPI service started."
+sleep 5  # Brief pause to allow FastAPI to initialize
 
-echo "🔨 Starting Celery workers..."
-docker compose up -d celery_worker_script_generator celery_worker_script_validator celery_worker_backtest celery_worker_report
-echo "✅ Celery workers started."
+# 3. Start Celery workers in sequence
+for worker in celery_worker_script_generator celery_worker_script_validator celery_worker_backtest celery_worker_report_generator; do
+    log "👷 Starting $worker..."
+    docker compose up -d $worker
+    sleep 3  # Brief pause between workers
+done
 
-# Step 4.5: Start Monitoring Services
-echo "📊 Starting monitoring services..."
-docker compose up -d prometheus grafana
-echo "✅ Monitoring services started."
+# 4. Start monitoring stack
+log "📊 Starting monitoring services..."
+docker compose up -d alphabench__prometheus
+sleep 3
 
-# Step 5: Confirm Deployment
-echo "🎉 Deployment completed successfully!"
-docker compose ps
+docker compose up -d alphabench__grafana
+sleep 3
 
-# Final Note
-echo "📂 Logs are available for review using: docker logs <container_name>"
-echo "📂 To check application status, visit your monitoring endpoints."
+# 5. Start Flower last
+log "🌸 Starting Celery Flower..."
+docker compose up -d celery_flower
 
-# Done!
+log "✨ Deployment completed successfully! 🎉"
+log "🌐 Services are available at their respective ports"
