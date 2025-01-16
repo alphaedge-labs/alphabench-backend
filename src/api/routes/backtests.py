@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List
 from uuid import UUID
 from pydantic import BaseModel
-import httpx
 
 from src.db.base import get_db
 from src.schemas.backtests import (
@@ -28,6 +27,8 @@ from src.infrastructure.llm.localllm_client import CustomLLMClient
 
 from src.api.services.websocket import manager
 from src.core.auth.jwt import get_current_user
+
+from src.infrastructure.storage.s3_client import S3Client
 
 
 router = APIRouter(prefix="/api/v1/backtests", tags=["backtests"])
@@ -86,6 +87,12 @@ async def create_backtest(
 
     strategy_title = await generate_strategy_title(backtest.strategy_description)
     
+    if strategy_title == "None":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid strategy description"
+        )
+
     # Sanitize strategy title by removing any leading or trailing whitespace
     strategy_title = strategy_title.strip('"')
 
@@ -276,11 +283,11 @@ async def get_backtest_report(
         )
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(backtest['report_url'])
-            response.raise_for_status()
-            return response.text
-    except httpx.HTTPError as e:
+        s3_client = S3Client()
+        report_key = f"{backtest_id}/report.md"
+        content = await s3_client.get_file_content(report_key)
+        return content
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Failed to fetch report"

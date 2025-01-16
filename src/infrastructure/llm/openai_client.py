@@ -16,6 +16,7 @@ from src.infrastructure.llm.prompts import (
     backtest_script_system_prompt_v4,
     backtest_script_system_prompt_with_dictionary,
     backtest_script_system_prompt_with_template_code,
+    backtest_script_system_prompt_vectorbt,
     # Strategy Title Prompts
     strategy_title_system_prompt,
     # Backtest Report Prompts
@@ -62,7 +63,7 @@ async def generate_strategy_title(strategy_description: str) -> str:
 async def generate_backtest_script(strategy_description: str, extra_message: str) -> tuple[str, list[str]]:
     """Generate Python script and required data points for the strategy"""
     try:
-        system_prompt = backtest_script_system_prompt_with_dictionary
+        system_prompt = backtest_script_system_prompt_vectorbt
         
         if extra_message:
             system_prompt = system_prompt + f"\n{extra_message}"
@@ -107,8 +108,9 @@ async def generate_backtest_script(strategy_description: str, extra_message: str
         logger.info(f'Response content: {content}')
 
         # Finding script
-        script_match = re.search(r'```python\n(.*?)```', content['script'], re.DOTALL)
-        script = script_match.group(1).strip() if script_match else None
+        # script_match = re.search(r'```python\n(.*?)```', content['script'], re.DOTALL)
+        # script = script_match.group(1).strip() if script_match else None
+        script = content['script']
 
         # Fetching data columns
         data_columns = content['data_columns']

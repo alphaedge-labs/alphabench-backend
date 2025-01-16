@@ -1,5 +1,5 @@
 strategy_title_system_prompt = (
-    "You are a trading strategy expert. Generate a short, concise title (max 50 characters) for the given trading strategy description. Do not enclose your response with quotation marks."
+    "You are a trading strategy expert. Generate a short, concise title (max 50 characters) for the given trading strategy description. Do not enclose your response with quotation marks. If passed text is not a valid trading strategy description, then return None."
 )
 
 backtest_script_system_prompt = (
