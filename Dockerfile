@@ -1,5 +1,5 @@
 # Build stage
-FROM python:3.11-slim as builder
+FROM python:3.10-slim as builder
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -24,7 +24,7 @@ COPY requirements.txt .
 RUN pip wheel --no-cache-dir --no-deps --wheel-dir /build/wheels -r requirements.txt
 
 # Final stage
-FROM python:3.11-slim
+FROM python:3.10-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \

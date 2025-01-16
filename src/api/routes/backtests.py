@@ -1,10 +1,9 @@
 # src/api/routes/backtests.py
 import json
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List
 from uuid import UUID
 from pydantic import BaseModel
-import httpx
 
 from src.db.base import get_db
 from src.schemas.backtests import (
@@ -20,13 +19,16 @@ from src.db.queries.backtests import (
     create_backtest_request,
     get_user_backtests,
     get_backtest_by_id,
-    get_grouped_backtests
+    get_grouped_backtests,
+    get_grouped_backtests_search
 )
 from src.infrastructure.llm.openai_client import generate_strategy_title
-from src.infrastructure.llm.localllm_client import CustomLLMClient
+# from src.infrastructure.llm.localllm_client import CustomLLMClient
 
 from src.api.services.websocket import manager
 from src.core.auth.jwt import get_current_user
+
+from src.infrastructure.storage.s3_client import S3Client
 
 
 router = APIRouter(prefix="/api/v1/backtests", tags=["backtests"])
@@ -81,10 +83,19 @@ async def create_backtest(
     - Subscribed: n/day (based on plan)
     """
     # Generate strategy title using LLM
-    custom_llm = CustomLLMClient()
+    # custom_llm = CustomLLMClient()
 
     strategy_title = await generate_strategy_title(backtest.strategy_description)
     
+    if strategy_title == "None":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid strategy description"
+        )
+
+    # Sanitize strategy title by removing any leading or trailing whitespace
+    strategy_title = strategy_title.strip('"')
+
     # Create backtest request in database
     backtest_dict = backtest.model_dump()
     backtest_dict['strategy_title'] = strategy_title
@@ -121,7 +132,7 @@ async def create_backtest(
     }
 )
 async def list_backtests(
-    current_user: dict = Depends(check_user_rate_limit),
+    current_user: dict = Depends(get_current_user),
     db = Depends(get_db)
 ) -> List[BacktestResponse]:
     """
@@ -170,7 +181,7 @@ async def list_backtests(
     }
 )
 async def get_past_backtests(
-    current_user: dict = Depends(check_user_rate_limit),
+    current_user: dict = Depends(get_current_user),
     db = Depends(get_db)
 ) -> GroupedBacktestsResponse:
     """
@@ -186,7 +197,7 @@ async def get_past_backtests(
 @router.get("/{backtest_id}", response_model=BacktestResponse)
 async def get_backtest(
     backtest_id: UUID,
-    current_user: dict = Depends(check_user_rate_limit),
+    current_user: dict = Depends(get_current_user),
     db = Depends(get_db)
 ) -> BacktestResponse:
     """
@@ -272,12 +283,53 @@ async def get_backtest_report(
         )
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(backtest['report_url'])
-            response.raise_for_status()
-            return response.text
-    except httpx.HTTPError as e:
+        s3_client = S3Client()
+        report_key = f"{backtest_id}/report.md"
+        content = await s3_client.get_file_content(report_key)
+        return content
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Failed to fetch report"
         )
+    
+@router.get(
+    "/past/search",
+    response_model=GroupedBacktestsResponse,
+    responses={
+        200: {
+            "description": "Search results for past backtests grouped by time periods",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "thisWeek": [
+                            {
+                                "id": "123e4567-e89b-12d3-a456-426614174000",
+                                "name": "Moving Average Strategy #1",
+                                "date": "2024-03-20"
+                            }
+                        ],
+                        "lastMonth": [],
+                        "older": []
+                    }
+                }
+            }
+        }
+    }
+)
+async def search_past_backtests(
+    q: str = Query(..., description="Search term to filter backtests"),
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_db)
+) -> GroupedBacktestsResponse:
+    """
+    Search past backtests for the current user and return results grouped by time periods.
+    Searches through strategy titles, descriptions, and instrument symbols.
+    Results are grouped into:
+    - thisWeek: Matching backtests from this week
+    - lastMonth: Matching backtests from this month but before this week
+    - older: Matching backtests before the current month
+    """
+    with db as conn:
+        result = get_grouped_backtests_search(conn, current_user['id'], q)
+        return GroupedBacktestsResponse(**result['result'])

@@ -1,5 +1,5 @@
 strategy_title_system_prompt = (
-    "You are a trading strategy expert. Generate a short, concise title (max 50 characters) for the given trading strategy description. Do not enclose your response with quotation marks."
+    "You are a trading strategy expert. Generate a short, concise title (max 50 characters) for the given trading strategy description. Do not enclose your response with quotation marks. If passed text is not a valid trading strategy description, then return None."
 )
 
 backtest_script_system_prompt = (
@@ -171,9 +171,9 @@ backtest_script_system_prompt_with_dictionary = (
     "   - Your response should only contain the generated Python script enclosed in triple backticks (` ```python ... ``` `).\n"
     "   - The script should generate **concise logs** (to avoid excessive token usage) capturing only **key events**:\n"
     "       - Log the starting capital in rupees and the date range of the backtest.\n"
-    "       - Trade entry/exit points (timestamp, price, reason for action, portfolio value before/after trade).\n"
-    "       - Portfolio value changes (but **only** at summary checkpoints, e.g., once per day or after each trade).\n"
-    "       - Running drawdown analysis at these summary checkpoints.\n"
+    "       - Aggregate trade entry/exit points (timestamp, price, reason for action, portfolio value before/after trade).\n"
+    "       - Aggregate portfolio value changes (but **only** at summary checkpoints, e.g., once per day or after each trade).\n"
+    "       - Aggregate running drawdown analysis at these summary checkpoints.\n"
     "       - **During the backtest**, calculate, update and store all final metrics and statistics in a dictionary called `final_results`, such as:\n"
     "           {\n"
     "             'starting_capital_rupees': ...,         \n"
@@ -224,67 +224,88 @@ backtest_script_system_prompt_with_dictionary = (
     "to generate a final backtest report."
 )
 
-backtest_report_system_prompt = (
-    "You are a trading strategy analyst. Generate a detailed markdown report from the backtest logs.\n"
-    "The report should include:\n"
-    "1. Strategy Performance Summary\n"
-    "2. Key Metrics (Returns, Sharpe Ratio, etc.)\n"
-    "3. Entry/Exit Analysis\n"
-    "4. Risk Analysis\n"
-    "5. Recommendations for Improvement\n"
-    "Format the report in clean, well-structured markdown."
+backtest_script_system_prompt_vectorbt = (
+    """
+    You are a python trading strategy expert. The user will provide a trading strategy description, and you must respond with a JSON object following this structure:
+
+    {
+        "script": "<string containing the python script>",
+        "data_columns": ["<string column1>", "<string column2>", ...]
+    }
+
+    Constraints and Requirements:
+    1. Do not include any additional keys in the JSON response.
+    2. Do not include Markdown formatting (such as ```python).
+    3. The "script" value must be a valid Python script as a single string. 
+    4. The "data_columns" value must be an array of strings, each representing a used column name.
+    5. The Python script should:
+    - Use the 'argparse' module to accept '--data' (path to a CSV file) and '--log' (path to a log file).
+    - Log the starting capital, the date range, final PnL and all other stats provided by 'vectorbt' by logging them using 
+        ```
+        logging.info(f"Portfolio Stats: {portfolio.stats()}")
+        ```
+    - The amount is in rupees and not dollars.
+    - Format logging for clarity, including metric names, values, and units (if applicable).
+    - Only contain the essential Python code for running the described strategy using 'vectorbt'.
+    - Be self-contained and directly runnable with 'python script.py --data data.csv --log backtest.log'.
+    6. When implementing stop losses or price-based comparisons:
+    - Always create a Series with the same index as the main data frame.
+    - Use forward fill (ffill) for maintaining stop loss prices across time.
+    - Ensure Series alignment by using proper index matching.
+    - Example stop loss implementation:
+        ```
+        stop_loss_prices = pd.Series(index=data.index, dtype=float)
+        stop_loss_prices.loc[entries] = data['price'][entries] * (1 - stop_loss)
+        stop_loss_prices = stop_loss_prices.ffill()
+        stop_loss_exit = (data['price'] <= stop_loss_prices) & (stop_loss_prices.notna())
+        ```
+
+    When the user provides a strategy description, respond with a JSON object containing only:
+    {
+        "script": "...",
+        "data_columns": [...]
+    }
+
+    No additional text or explanation should be included.
+    """
 )
 
-backtest_report_system_prompt_v2 = (
-    "You are a trading strategy analyst. Generate a comprehensive markdown report from the backtest logs.\n"
-    "The report should include:\n"
+backtest_report_system_prompt_v3 = (
+    "You are a trading strategy analyst. Generate a concise markdown report from aggregated backtest logs.\n"
+    "Follow these steps to keep the output small:\n"
     "\n"
-    "## 1. Backtest Summary\n"
-    "   * Summarize key details of the strategy execution, including:\n"
-    "       - Initial capital\n"
-    "       - Final portfolio value\n"
-    "       - Net profit (both absolute and percentage terms)\n"
-    "       - Annualized return\n"
-    "       - Maximum drawdown with percentage and timestamps\n"
-    "       - Winning and losing trades percentage\n"
-    "       - Sharpe Ratio, Sortino Ratio\n"
-    "       - Time period covered by the backtest\n"
+    "1. **Parse Only Aggregated Data**:\n"
+    "   - Assume you have access only to a minimal log containing final metrics and aggregated stats (no raw trades).\n"
+    "   - Summarize:\n"
+    "       - Initial capital, final portfolio value, net profit (absolute & %), annualized return.\n"
+    "       - Maximum drawdown (absolute & %), drawdown period.\n"
+    "       - Win/loss percentages, Sharpe ratio, Sortino ratio.\n"
+    "       - Time period covered.\n"
     "\n"
-    "## 2. Detailed Trade Statistics\n"
-    "   * Include a detailed trade breakdown with metrics like:\n"
-    "       - Total trades executed\n"
-    "       - Average profit/loss per trade\n"
-    "       - Largest winning trade\n"
-    "       - Largest losing trade\n"
-    "       - Average holding period\n"
+    "2. **Detailed Trade Statistics (Aggregated)**:\n"
+    "   - From aggregated data, present:\n"
+    "       - Total trades executed.\n"
+    "       - Largest win/loss.\n"
+    "       - Average profit/loss per trade.\n"
+    "       - Average holding period.\n"
+    "   - Use a concise table for these metrics.\n"
     "\n"
-    "   * Present this in a tabular format for clarity.\n"
+    "3. **Strategy Insights**:\n"
+    "   - Briefly highlight best/worst periods or months if available.\n"
+    "   - Only summarize, do not expand partial data.\n"
     "\n"
-    "## 3. Strategy Insights\n"
-    "   * Highlight specific periods of strong or weak performance, such as:\n"
-    "       - Best and worst-performing months (by percentage)\n"
-    "       - Notable trends in trade success rates\n"
+    "4. **Risk Metrics**:\n"
+    "   - Include maximum exposure, max drawdown stats, and relevant timestamps.\n"
+    "   - Present them in a small table.\n"
     "\n"
-    "## 4. Risk Metrics\n"
-    "   * Include detailed risk analysis such as:\n"
-    "       - Maximum portfolio exposure\n"
-    "       - Drawdown statistics (time periods, drawdown depth)\n"
+    "5. **Recommendations**:\n"
+    "   - Provide short, actionable recommendations based on risk/return metrics.\n"
+    "   - Avoid extraneous commentary.\n"
     "\n"
-    "   * Present this in a separate table.\n"
-    "\n"
-    "## 5. Recommendations\n"
-    "   * Provide actionable recommendations based on performance and risk metrics, including:\n"
-    "       - Adjustments to entry/exit points\n"
-    "       - Improved risk management techniques (e.g., tighter stop-loss)\n"
-    "       - Suggestions for further testing in varying market conditions\n"
-    "\n"
-    "### Output Formatting:\n"
-    "   - The report must be written in clean, well-structured markdown.\n"
-    "   - Use tables for detailed numerical metrics and statistics.\n"
-    "   - Use two decimal places for all the numerical values.\n"
-    "   - Use percentage with two decimal places for all the percentage values.\n"
-    "   - Use rupees symbol for all the rupees values.\n"
-    "   - Ignore null values in report generation.\n"
-    "   - Ensure headings are properly structured and hierarchically organized.\n"
-    "   - Avoid redundant or verbose commentary—focus on data and insights.\n"
+    "### **Formatting**:\n"
+    "   - Output a well-structured markdown report with headings.\n"
+    "   - Two decimal places for numerical values, e.g. 1234.56.\n"
+    "   - Use `₹` for rupees, and `xx.xx%` for percentages.\n"
+    "   - Skip or ignore any null fields.\n"
+    "   - Keep the report compact.\n"
 )

@@ -28,14 +28,15 @@ class GoogleOAuth:
             )
 
     @staticmethod
-    async def authenticate_user(code: str, redirect_uri: str, db) -> Tuple[Dict, bool]:
+    async def authenticate_user(code: str, current_user_id: str, redirect_uri: str, db) -> Tuple[Dict, bool]:
         """Authenticate user with Google OAuth"""
         try:
             # Verify the token with Google
             user_info = await GoogleOAuth.verify_token(code)
             
-            # Check if user exists
+            # Check if user exists by google_id or email first
             with get_db() as conn:
+                # First try to find an existing Google user
                 user = execute_query_single(
                     conn,
                     """
@@ -46,7 +47,34 @@ class GoogleOAuth:
                 )
                 
                 if not user:
-                    # Create new user
+                    # Try to find anonymous user from the current session
+                    user = execute_query_single(
+                        conn,
+                        """
+                        SELECT * FROM users 
+                        WHERE id = %s AND is_anonymous = true
+                        """,
+                        (current_user_id,)  # We need to get this from the request context
+                    )
+                    
+                    if user:
+                        # Update anonymous user with Google info
+                        user = execute_query_single(
+                            conn,
+                            """
+                            UPDATE users 
+                            SET google_id = %s,
+                                email = %s,
+                                is_anonymous = false
+                            WHERE id = %s
+                            RETURNING *
+                            """,
+                            (user_info['sub'], user_info['email'], user['id'])
+                        )
+                        conn.commit()
+                        return user, False
+                    
+                    # If no existing user found at all, create new one
                     user = execute_query_single(
                         conn,
                         """
@@ -58,20 +86,6 @@ class GoogleOAuth:
                     )
                     conn.commit()
                     return user, True
-                
-                # Update existing user if needed
-                if not user['google_id']:
-                    execute_query_single(
-                        conn,
-                        """
-                        UPDATE users 
-                        SET google_id = %s, is_anonymous = false
-                        WHERE id = %s
-                        RETURNING *
-                        """,
-                        (user_info['sub'], user['id'])
-                    )
-                    conn.commit()
                 
                 return user, False
                 

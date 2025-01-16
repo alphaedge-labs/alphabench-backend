@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordBearer
 from datetime import timedelta
 
 from src.core.auth.google import GoogleOAuth
-from src.core.auth.jwt import create_access_token, get_current_active_user
+from src.core.auth.jwt import create_access_token, get_current_user
 from src.db.base import get_db
 from src.schemas.auth import Token, UserResponse, GoogleAuthRequest
 from src.config.settings import settings
@@ -51,7 +51,8 @@ router = APIRouter(
 )
 async def google_auth(
     auth_request: GoogleAuthRequest,
-    db = Depends(get_db)
+    db = Depends(get_db),
+    current_user = Depends(get_current_user)
 ) -> Token:
     """
     Authenticate user with Google OAuth.
@@ -68,6 +69,7 @@ async def google_auth(
     try:
         user, is_new_user = await GoogleOAuth.authenticate_user(
             auth_request.code,
+            current_user.id,
             auth_request.redirect_uri,
             db
         )
