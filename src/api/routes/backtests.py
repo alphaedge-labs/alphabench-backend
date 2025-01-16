@@ -23,7 +23,7 @@ from src.db.queries.backtests import (
     get_grouped_backtests_search
 )
 from src.infrastructure.llm.openai_client import generate_strategy_title
-from src.infrastructure.llm.localllm_client import CustomLLMClient
+# from src.infrastructure.llm.localllm_client import CustomLLMClient
 
 from src.api.services.websocket import manager
 from src.core.auth.jwt import get_current_user
@@ -83,7 +83,7 @@ async def create_backtest(
     - Subscribed: n/day (based on plan)
     """
     # Generate strategy title using LLM
-    custom_llm = CustomLLMClient()
+    # custom_llm = CustomLLMClient()
 
     strategy_title = await generate_strategy_title(backtest.strategy_description)
     
@@ -132,7 +132,7 @@ async def create_backtest(
     }
 )
 async def list_backtests(
-    current_user: dict = Depends(check_user_rate_limit),
+    current_user: dict = Depends(get_current_user),
     db = Depends(get_db)
 ) -> List[BacktestResponse]:
     """
@@ -181,7 +181,7 @@ async def list_backtests(
     }
 )
 async def get_past_backtests(
-    current_user: dict = Depends(check_user_rate_limit),
+    current_user: dict = Depends(get_current_user),
     db = Depends(get_db)
 ) -> GroupedBacktestsResponse:
     """
@@ -197,7 +197,7 @@ async def get_past_backtests(
 @router.get("/{backtest_id}", response_model=BacktestResponse)
 async def get_backtest(
     backtest_id: UUID,
-    current_user: dict = Depends(check_user_rate_limit),
+    current_user: dict = Depends(get_current_user),
     db = Depends(get_db)
 ) -> BacktestResponse:
     """

@@ -3,7 +3,7 @@ from typing import List
 
 from src.db.base import get_db
 from src.schemas.reports import ReportResponse
-from src.api.dependencies import check_user_rate_limit
+from src.api.dependencies import get_current_user
 from src.db.queries.backtests import get_backtest_by_id, get_user_backtests
 
 router = APIRouter(
@@ -41,7 +41,7 @@ router = APIRouter(
     }
 )
 async def list_reports(
-    current_user: dict = Depends(check_user_rate_limit),
+    current_user: dict = Depends(get_current_user),
     db = Depends(get_db)
 ) -> List[ReportResponse]:
     """
@@ -84,7 +84,7 @@ async def list_reports(
 )
 async def get_report(
     backtest_id: str,
-    current_user: dict = Depends(check_user_rate_limit),
+    current_user: dict = Depends(get_current_user),
     db = Depends(get_db)
 ) -> ReportResponse:
     """
