@@ -9,7 +9,7 @@ from src.schemas.auth import Token, UserResponse, GoogleAuthRequest
 from src.config.settings import settings
 
 router = APIRouter(
-    prefix="/api/v1/auth",
+    prefix="/v1/auth",
     tags=["authentication"],
     responses={
         401: {

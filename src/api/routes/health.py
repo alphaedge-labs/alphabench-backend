@@ -10,7 +10,7 @@ from src.utils.health import (
 )
 from src.utils.logger import get_logger
 
-router = APIRouter(prefix="/api/v1/health", tags=["health"])
+router = APIRouter(prefix="/v1/health", tags=["health"])
 logger = get_logger(__name__)
 
 @router.get("")

@@ -17,6 +17,18 @@ def get_subscription_plans(conn) -> List[dict]:
         """
     )
 
+def get_subscription_plan(conn, plan_id: str) -> Optional[dict]:
+    """Get subscription plan details"""
+    return execute_query_single(
+        conn,
+        """
+        SELECT id, name, description, price_usd, reports_per_day, created_at, razorpay_plan_id
+        FROM subscription_plans
+        WHERE id = %s
+        """,
+        (plan_id,)
+    )
+
 def get_user_subscription(db, user_id: UUID) -> Optional[dict]:
     """Get user's active subscription"""
     return execute_query_single(
@@ -139,3 +151,89 @@ def get_subscription_usage(db, user_id: UUID) -> dict:
         """,
         (user_id,)
     )
+
+async def update_user_subscription_status(
+    db,
+    user_id: UUID,
+    subscription_id: str,
+    payment_id: str,
+    signature: str,
+    status: str,
+    is_active: bool
+):
+    """Update subscription status after payment verification"""
+    try:
+        result = execute_query_single(
+            db,
+            """
+            UPDATE user_subscriptions
+            SET status = %s,
+                is_active = %s,
+                razorpay_payment_id = %s,
+                razorpay_signature = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = %s 
+            AND razorpay_subscription_id = %s
+            RETURNING id, status
+            """,
+            (status, is_active, payment_id, signature, user_id, subscription_id)
+        )
+        
+        if not result:
+            raise Exception("Subscription not found")
+            
+        db.commit()
+        return result
+        
+    except Exception as e:
+        db.rollback()
+        raise Exception(f"Failed to update subscription: {str(e)}")
+    
+
+def get_subscription_by_user_id(db, user_id: UUID) -> Optional[dict]:
+    """Get user's subscription by ID"""
+    try:
+        subscription = execute_query_single(
+            db,
+            """
+            SELECT 
+                us.id as subscription_id,
+                us.is_active as subscription_status,
+                us.end_date as subscription_end_date,
+                sp.id as subscription_plan_id,
+                sp.name as subscription_plan_name
+            FROM users u
+            LEFT JOIN user_subscriptions us ON u.id = us.user_id
+            LEFT JOIN subscription_plans sp ON us.plan_id = sp.id
+            WHERE u.id = %s
+            AND us.is_active = true
+            AND us.end_date > CURRENT_TIMESTAMP
+            ORDER BY us.end_date DESC
+            LIMIT 1
+            """,
+            (user_id,)
+        )
+
+        db.commit()
+        return subscription
+
+    except Exception as e:
+        db.rollback()
+        raise Exception(f"Failed to get user subscription: {str(e)}")
+    
+
+def create_user_subscription(db, user_id: UUID, plan_id: UUID, razorpay_subscription_id: str, start_date: datetime, end_date: datetime) -> dict:
+    """Create a new subscription for a user"""
+    try:
+        return execute_query_single(
+            db,
+            """
+            INSERT INTO user_subscriptions (user_id, plan_id, razorpay_subscription_id, start_date, end_date)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (user_id, plan_id, razorpay_subscription_id, start_date, end_date)
+            )
+    except Exception as e:
+        db.rollback()
+        raise Exception(f"Failed to create subscription: {str(e)}")

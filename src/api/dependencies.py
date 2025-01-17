@@ -85,6 +85,7 @@ async def check_user_rate_limit(
 async def identify_anonymous_user(request: Request) -> dict:
     """Create or get anonymous user based on IP and MAC address"""
     ip_address = request.client.host
+
     # Note: MAC address would typically come from request headers or other means
     mac_address = request.headers.get('X-MAC-Address', 'unknown')
     

@@ -31,7 +31,7 @@ from src.core.auth.jwt import get_current_user
 from src.infrastructure.storage.s3_client import S3Client
 
 
-router = APIRouter(prefix="/api/v1/backtests", tags=["backtests"])
+router = APIRouter(prefix="/v1/backtests", tags=["backtests"])
 
 @router.post(
     "", 

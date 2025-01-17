@@ -7,7 +7,7 @@ from src.api.dependencies import get_current_user
 from src.db.queries.backtests import get_backtest_by_id, get_user_backtests
 
 router = APIRouter(
-    prefix="/api/v1/reports",
+    prefix="/v1/reports",
     tags=["reports"],
     responses={
         401: {"description": "Not authenticated"},

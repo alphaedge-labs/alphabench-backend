@@ -15,7 +15,7 @@ from src.db.queries.subscriptions import (
 )
 
 router = APIRouter(
-    prefix="/api/v1/subscriptions",
+    prefix="/v1/subscriptions",
     tags=["subscriptions"],
     responses={
         401: {"description": "Not authenticated"},

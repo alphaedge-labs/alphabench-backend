@@ -46,6 +46,31 @@ class UserResponse(BaseModel):
         description="Whether this is an anonymous user",
         example=False
     )
+    subscription_status: Optional[str] = Field(
+        ...,
+        description="Subscription status",
+        example="active"
+    )
+    subscription_id: Optional[str] = Field(
+        ...,
+        description="Subscription ID",
+        example="sub_1234567890"
+    )
+    subscription_end_date: Optional[datetime] = Field(
+        ...,
+        description="Subscription end date",
+        example="2024-01-01T00:00:00Z"
+    )
+    subscription_plan_name: Optional[str] = Field(
+        ...,
+        description="Subscription plan name",
+        example="Basic"
+    )
+    subscription_plan_id: Optional[str] = Field(
+        ...,
+        description="Subscription plan ID",
+        example="plan_1234567890"
+    )
     created_at: datetime = Field(
         ...,
         description="When the user account was created",
