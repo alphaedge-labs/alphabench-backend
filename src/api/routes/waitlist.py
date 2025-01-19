@@ -7,7 +7,7 @@ from src.db.base import get_db
 from src.db.queries.waitlist import create_waitlist_entry, get_waitlist_entry, get_all_waitlist_entries
 
 router = APIRouter(
-    prefix="/api/v1/waitlist",
+    prefix="/v1/waitlist",
     tags=["waitlist"],
     responses={
         400: {

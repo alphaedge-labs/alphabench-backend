@@ -15,7 +15,7 @@ from src.db.queries.subscriptions import (
 )
 
 router = APIRouter(
-    prefix="/api/v1/subscriptions",
+    prefix="/v1/subscriptions",
     tags=["subscriptions"],
     responses={
         401: {"description": "Not authenticated"},
@@ -103,13 +103,32 @@ async def get_active_subscription(
     
     Returns 404 if the user has no active subscription.
     """
-    subscription = get_user_subscription(db, current_user['id'])
+
+    print(current_user)
+
+    with db as conn:
+        subscription = get_user_subscription(conn, current_user.get('id'))
+    
+    print(subscription)
+
     if not subscription:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No active subscription found"
         )
-    return subscription
+    
+    subscription_data = {
+        **subscription,
+        "plan": {
+            "id": subscription["plan_id"],
+            "name": subscription["plan_name"],
+            "price_usd": subscription["price_usd"],
+            "reports_per_day": subscription["reports_per_day"],
+            "created_at": subscription["plan_created_at"]
+        }
+    }
+    
+    return UserSubscriptionResponse(**subscription_data)
 
 @router.post(
     "",

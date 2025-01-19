@@ -2,6 +2,12 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 
 class Settings(BaseSettings):
+    # Application
+    DEBUG: bool = True
+
+    # Frontend
+    SHARE_FRONTEND_URL: str
+
     # FastAPI
     PORT: int = 8000
 
@@ -43,6 +49,14 @@ class Settings(BaseSettings):
     # Rate limiting
     ANONYMOUS_DAILY_LIMIT: int = 3
     AUTHENTICATED_DAILY_LIMIT: int = 5
+
+    # Razorpay
+    RAZORPAY_KEY_ID: str
+    RAZORPAY_KEY_SECRET: str
+    RAZORPAY_WEBHOOK_SECRET: str
+
+    # Preview Image
+    PREVIEW_IMAGE_SERVER_URL: str
 
     class Config:
         env_file = ".env"

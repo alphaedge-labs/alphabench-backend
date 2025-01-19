@@ -1,12 +1,12 @@
 from psycopg2 import sql
 from typing import List
-import logging
 from datetime import datetime
 import pandas as pd
 
 from src.db.base import execute_query
 
-logger = logging.getLogger()
+from src.utils.logger import get_logger
+logger = get_logger(__name__)
 
 def get_available_columns(
     conn,

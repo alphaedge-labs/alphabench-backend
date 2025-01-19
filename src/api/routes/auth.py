@@ -7,9 +7,12 @@ from src.core.auth.jwt import create_access_token, get_current_user
 from src.db.base import get_db
 from src.schemas.auth import Token, UserResponse, GoogleAuthRequest
 from src.config.settings import settings
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(
-    prefix="/api/v1/auth",
+    prefix="/v1/auth",
     tags=["authentication"],
     responses={
         401: {
@@ -69,13 +72,15 @@ async def google_auth(
     try:
         user, is_new_user = await GoogleOAuth.authenticate_user(
             auth_request.code,
-            current_user.id,
+            current_user.get('id'),
             auth_request.redirect_uri,
             db
         )
         
+        logger.info(f"User authenticated: {user.get('id')}")
+
         access_token = create_access_token(
-            data={"sub": user['id']},
+            data={"sub": user.get('id')},
             expires_delta=timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
         )
         

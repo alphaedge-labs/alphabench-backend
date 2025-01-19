@@ -21,9 +21,8 @@ from src.constants.backtests import (
 )
 from src.infrastructure.queue.instrumentation import track_celery_task
 
-
-import logging
-logger = logging.getLogger()
+from src.utils.logger import get_logger
+logger = get_logger(__name__)
 
 class BacktestExecutionTask(Task):
     def on_failure(self, exc, task_id, args, kwargs, einfo):

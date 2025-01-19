@@ -105,7 +105,8 @@ class UserSubscriptionResponse(BaseModel):
                     "id": "123e4567-e89b-12d3-a456-426614174002",
                     "name": "Professional",
                     "price_usd": 49.99,
-                    "reports_per_day": 100
+                    "reports_per_day": 100,
+                    "created_at": "2024-01-01T00:00:00Z"
                 }
             }
         }

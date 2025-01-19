@@ -22,6 +22,7 @@ wheels/
 
 # Virtual Environment
 .env
+.env.local
 .env.prod
 .venv
 env/
@@ -85,7 +86,6 @@ temp/
 *.pdf
 *.zip
 *.tar.gz
-*.sql
 
 # Prometheus & Grafana
 prometheus_data/

@@ -1,8 +1,8 @@
 from typing import Dict
 from fastapi import WebSocket
-import logging
 
-logger = logging.getLogger()
+from src.utils.logger import get_logger
+logger = get_logger(__name__)
 
 class ConnectionManager:
     def __init__(self):

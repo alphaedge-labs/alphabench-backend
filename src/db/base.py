@@ -3,10 +3,10 @@ from psycopg2.extras import RealDictCursor
 from contextlib import contextmanager
 from typing import Generator
 
-from logging import getLogger
 from src.config.settings import settings
+from src.utils.logger import get_logger
 
-logger = getLogger()
+logger = get_logger(__name__)
 
 def get_db_connection():
     """Create a database connection"""

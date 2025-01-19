@@ -4,13 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List
 from uuid import UUID
 from pydantic import BaseModel
+import httpx
 
 from src.db.base import get_db
 from src.schemas.backtests import (
     BacktestResponse,
     BacktestCreate,
     BacktestUpdate,
-    GroupedBacktestsResponse
+    GroupedBacktestsResponse,
+    ShareResponse,
+    SharedBacktestResponse
 )
 from src.api.dependencies import check_user_rate_limit
 from src.tasks.script_generation import generate_backtest_script_task as generate_backtest_script
@@ -20,7 +23,10 @@ from src.db.queries.backtests import (
     get_user_backtests,
     get_backtest_by_id,
     get_grouped_backtests,
-    get_grouped_backtests_search
+    get_grouped_backtests_search,
+    update_backtest_preview_image_url,
+    update_backtest_share_id,
+    get_backtest_by_share_id
 )
 from src.infrastructure.llm.openai_client import generate_strategy_title
 # from src.infrastructure.llm.localllm_client import CustomLLMClient
@@ -30,8 +36,12 @@ from src.core.auth.jwt import get_current_user
 
 from src.infrastructure.storage.s3_client import S3Client
 
+from src.config.settings import settings
 
-router = APIRouter(prefix="/api/v1/backtests", tags=["backtests"])
+from src.utils.logger import get_logger
+logger = get_logger(__name__)
+
+router = APIRouter(prefix="/v1/backtests", tags=["backtests"])
 
 @router.post(
     "", 
@@ -206,7 +216,13 @@ async def get_backtest(
     with db as conn:
         backtest = get_backtest_by_id(conn=conn, backtest_id=backtest_id)
 
-    if not backtest or backtest['user_id'] != current_user['id']:
+    if not backtest:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Backtest not found"
+        )
+
+    if not backtest.get('is_public', False) and backtest['user_id'] != current_user['id']:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Backtest not found"
@@ -230,6 +246,8 @@ async def broadcast_backtest(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Backtest not found"
             )
+
+        logger.info(f"Updated backtest: {backtest_update}")
 
         data = {
             "event": "backtest.update",
@@ -333,3 +351,124 @@ async def search_past_backtests(
     with db as conn:
         result = get_grouped_backtests_search(conn, current_user['id'], q)
         return GroupedBacktestsResponse(**result['result'])
+
+@router.get(
+    "/{backtest_id}/share",
+    response_model=ShareResponse,
+    responses={
+        200: {
+            "description": "Generated shareable link for the backtest report",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "shareUrl": "https://app.alphabench.in/s/abc123"
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "Report not found or not yet generated"
+        }
+    }
+)
+async def generate_share_link(
+    backtest_id: UUID,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_db)
+) -> ShareResponse:
+    """Generate a shareable link for a backtest report with preview image metadata."""
+    with db as conn:
+        backtest = get_backtest_by_id(conn=conn, backtest_id=backtest_id)
+
+        if not backtest or backtest['user_id'] != current_user['id']:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Report not found"
+            )
+
+        if not backtest.get('report_url'):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Report not yet generated"
+            )
+
+        try:
+            # Fetch report content
+            s3_client = S3Client()
+            report_key = f"{backtest_id}/report.md"
+            report_content = await s3_client.get_file_content(report_key)
+
+            # Generate preview image
+            async with httpx.AsyncClient() as client:
+                preview_response = await client.post(
+                    f"{settings.PREVIEW_IMAGE_SERVER_URL}/generate-preview",
+                    json={
+                        "userId": str(current_user['id']),
+                        "markdown": report_content
+                    }
+                )
+                preview_response.raise_for_status()
+                preview_data = preview_response.json()
+                preview_image_url = preview_data['imageUrl']
+
+            # Update backtest with preview URL
+            update_backtest_preview_image_url(
+                conn,
+                backtest_id,
+                preview_image_url=preview_image_url
+            )
+
+            # Generate share ID
+            share_id = update_backtest_share_id(conn, backtest_id)
+
+            # Generate shareable URL using short ID
+            share_url = f"{settings.SHARE_FRONTEND_URL}/s/{share_id}"
+            share_text = f"Check out my backtest report: {share_url}"
+
+            return ShareResponse(share_url=share_url, share_text=share_text)
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to generate share link: {str(e)}"
+            )
+
+@router.get(
+    "/s/{share_id}",
+    response_model=SharedBacktestResponse,
+    responses={
+        200: {
+            "description": "Public backtest information",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "123e4567-e89b-12d3-a456-426614174000",
+                        "strategy_title": "Golden Cross Strategy",
+                        "instrument_symbol": "AAPL",
+                        "from_date": "2023-01-01",
+                        "to_date": "2023-12-31",
+                        "preview_image_url": "https://..."
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "Shared backtest not found"
+        }
+    }
+)
+async def get_shared_backtest(
+    share_id: str,
+    db = Depends(get_db)
+) -> SharedBacktestResponse:
+    """Get publicly shared backtest information"""
+    with db as conn:
+        backtest = get_backtest_by_share_id(conn=conn, share_id=share_id)
+        
+        if not backtest:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Shared backtest not found"
+            )
+        
+        return SharedBacktestResponse(**backtest)

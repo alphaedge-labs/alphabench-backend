@@ -16,7 +16,8 @@ from src.api.routes import (
     subscriptions, 
     health, 
     users, 
-    waitlist
+    waitlist,
+    razorpay
 )
 from src.api.services.websocket import manager
 
@@ -118,6 +119,7 @@ app.include_router(subscriptions.router)
 app.include_router(health.router)
 app.include_router(users.router)
 app.include_router(waitlist.router)
+app.include_router(razorpay.router)
 
 # Create metrics endpoint
 metrics_app = make_asgi_app()

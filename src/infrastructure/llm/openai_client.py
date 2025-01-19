@@ -1,5 +1,4 @@
 from openai import AsyncOpenAI
-from logging import getLogger
 import re
 import json
 
@@ -9,6 +8,7 @@ from src.utils.metrics import (
     LLM_REQUEST_DURATION,
     track_time
 )
+from src.utils.logger import get_logger
 from src.infrastructure.llm.prompts import (
     # Backtest Script Prompts
     backtest_script_system_prompt_vectorbt,
@@ -19,7 +19,7 @@ from src.infrastructure.llm.prompts import (
 )
 
 client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-logger = getLogger()
+logger = get_logger(__name__)
 
 @track_time(LLM_REQUEST_DURATION.labels(operation='title_generation'))
 async def generate_strategy_title(strategy_description: str) -> str:
