@@ -101,6 +101,11 @@ class BacktestRequest(BacktestCreate):
         ...,
         description="Timestamp when the request was last updated"
     )
+    share_id: Optional[str] = Field(
+        None,
+        description="Short ID for public sharing",
+        example="abc123"
+    )
 
     class Config:
         json_schema_extra = {
@@ -142,3 +147,23 @@ class GroupedBacktestsResponse(BaseModel):
     thisWeek: List[BacktestTimeGroup]
     lastMonth: List[BacktestTimeGroup]
     older: List[BacktestTimeGroup]
+
+class ShareResponse(BaseModel):
+    share_url: str = Field(
+        ...,
+        description="Shareable URL for the backtest report",
+        example="https://app.alphabench.in/results/123e4567-e89b-12d3-a456-426614174000"
+    )
+    share_text: str = Field(
+        ...,
+        description="Text to share with the backtest report",
+        example="Check out my backtest report: https://app.alphabench.in/results/123e4567-e89b-12d3-a456-426614174000"
+    )
+
+class SharedBacktestResponse(BaseModel):
+    id: UUID
+    strategy_title: str
+    instrument_symbol: str
+    from_date: date
+    to_date: date
+    preview_image_url: Optional[str]

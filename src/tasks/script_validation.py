@@ -21,8 +21,8 @@ from src.constants.backtests import (
 )
 from src.infrastructure.queue.instrumentation import track_celery_task
 
-import logging
-logger = logging.getLogger()
+from src.utils.logger import get_logger
+logger = get_logger(__name__)
 
 class ScriptValidationTask(Task):
     def on_failure(self, exc, task_id, args, kwargs, einfo):
@@ -57,16 +57,16 @@ def validate_backtest_script(self, backtest_id: UUID):
                 data_path = os.path.join(temp_dir, "validation_data.csv")
                 log_path = os.path.join(temp_dir, "backtest.log")
                 
-                async def download_files():
-                    # Download script using HTTP
-                    response = requests.get(backtest['python_script_url'])
-                    with open(script_path, 'wb') as script_file:
-                        script_file.write(response.content)
+                s3_client = S3Client()
 
-                    # Download validation data using HTTP
-                    response = requests.get(backtest['validation_data_url'])
-                    with open(data_path, 'wb') as data_file:
-                        data_file.write(response.content)
+                script_key = f"{backtest_id}/script.py"
+                data_key = f"{backtest_id}/validation_data.csv"
+
+                async def download_files():
+                    await asyncio.gather(
+                        s3_client.download_file(script_key, script_path),
+                        s3_client.download_file(data_key, data_path)
+                    )
 
                 # Run the async download function
                 asyncio.run(download_files())
@@ -76,14 +76,23 @@ def validate_backtest_script(self, backtest_id: UUID):
                 os.chmod(script_path, 0o755)
                 
                 # Run script with validation data
-                result = subprocess.run(
-                    ["python", script_path, "--data", data_path, "--log", log_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=300  # 5 minute timeout
-                )
+                logger.info(f"Running script with validation data for backtest: {backtest_id}")
+
+                try:
+                    result = subprocess.run(
+                        ["python", script_path, "--data", data_path, "--log", log_path],
+                        capture_output=True,
+                        text=True,
+                        timeout=300  # 5 minute timeout
+                    )
+                    logger.info(f"Script execution output - stdout:\n{result.stdout}")
+                    logger.info(f"Script execution output - stderr:\n{result.stderr}")
+                except subprocess.TimeoutExpired as e:
+                    logger.error(f"Script timed out for backtest {backtest_id}. Last stdout: {e.stdout}\nLast stderr: {e.stderr}")
+                    raise
                 
                 if result.returncode != 0:
+                    logger.error(f"Validation failed. Subprocess result: {result}")
                     raise Exception(f"Validation failed: {result.stderr}")
 
                 logger.info(f"Successfully validated script for backtest: {backtest_id}")
@@ -92,8 +101,7 @@ def validate_backtest_script(self, backtest_id: UUID):
                 update_backtest_status(
                     conn, 
                     backtest_id, 
-                    BACKTEST_STATUS_VALIDATION_PASSED, 
-                    ready_for_report=True
+                    BACKTEST_STATUS_VALIDATION_PASSED
                 )
                 
                 # Queue full backtest execution

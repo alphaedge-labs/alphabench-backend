@@ -10,10 +10,10 @@ from src.db.queries.subscriptions import (
     create_user_subscription
 )
 from src.config.settings import settings
-import logging
 from datetime import datetime, timedelta
+from src.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(
     prefix="/v1/razorpay",
@@ -39,7 +39,10 @@ async def create_subscription(
     
     subscription = razorpay.create_subscription(
         plan.get('razorpay_plan_id'),
-        notes={"user_id": str(current_user['id'])}
+        notes={
+            "user_id": str(current_user['id']), 
+            "plan_id": str(plan.get('id'))
+        }
     )
 
     with db as conn:
@@ -69,14 +72,17 @@ async def razorpay_webhook(request: Request, db = Depends(get_db)):
     webhook_body = await request.body()
     event = await request.json()
 
-    expected_signature = hmac.new(
-        settings.RAZORPAY_WEBHOOK_SECRET.encode(),
-        webhook_body,
-        hashlib.sha256
-    ).hexdigest()
+    logger.info(f"Razorpay webhook received: {event}")
+
+    # Uncomment this to verify the signature when account is verified
+    # expected_signature = hmac.new(
+    #     settings.RAZORPAY_WEBHOOK_SECRET.encode(),
+    #     webhook_body,
+    #     hashlib.sha256
+    # ).hexdigest()
     
-    if not hmac.compare_digest(webhook_signature, expected_signature):
-        raise HTTPException(status_code=400, detail="Invalid signature")
+    # if not hmac.compare_digest(webhook_signature, expected_signature):
+    #     raise HTTPException(status_code=400, detail="Invalid signature")
 
     if event['event'] == 'subscription.activated':
         # Update subscription status
@@ -84,6 +90,7 @@ async def razorpay_webhook(request: Request, db = Depends(get_db)):
         payment_id = event['payload']['payment']['entity']['id']
         signature = webhook_signature
         user_id = event['payload']['subscription']['entity']['notes'].get('user_id')
+        plan_id = event['payload']['subscription']['entity']['notes'].get('plan_id')
 
         with db as conn:
             await update_user_subscription_status(
@@ -93,7 +100,8 @@ async def razorpay_webhook(request: Request, db = Depends(get_db)):
                 payment_id=payment_id,
                 signature=signature,
                 status='active',
-                is_active=True
+                is_active=True,
+                plan_id=plan_id
             )
     
     return {"status": "processed"}
@@ -144,11 +152,12 @@ async def verify_payment(
         )
         
         if not is_valid:
+            logger.error(f"Invalid payment signature: {verification.razorpay_payment_id}, {verification.razorpay_subscription_id}, {verification.razorpay_signature}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid payment signature"
             )
-        
+
         return {"status": "success"}
         
     except Exception as e:

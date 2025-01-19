@@ -2,6 +2,7 @@ from typing import List, Optional
 from uuid import UUID
 import logging
 import asyncio
+import shortuuid
 
 from src.db.base import execute_query, execute_query_single
 
@@ -9,7 +10,8 @@ from src.api.services.postbacks import (
     post_backtest_update
 )
 
-logger = logging.getLogger()
+from src.utils.logger import get_logger
+logger = get_logger(__name__)
 
 def create_backtest_request(conn, user_id: UUID, backtest: dict) -> dict:
     """Create a new backtest request"""
@@ -68,7 +70,14 @@ def get_backtest_by_id(conn, backtest_id: UUID) -> Optional[dict]:
         logger.error(f"Error in get_backtest_by_id: {e}")
         return None
 
-def update_backtest_status(conn, backtest_id: UUID, status: str, error_message: Optional[str] = None, ready_for_report: bool = False, generated_report: bool = False) -> dict:
+def update_backtest_status(
+    conn,
+    backtest_id: UUID,
+    status: str,
+    error_message: Optional[str] = None,
+    ready_for_report: bool = False,
+    generated_report: bool = False
+) -> dict:
     """Update backtest status and error message"""
     try:
         result = execute_query_single(
@@ -95,7 +104,6 @@ def update_backtest_status(conn, backtest_id: UUID, status: str, error_message: 
         logger.info("Broadcast backtest update initiated.")
         return result
     except Exception as e:
-        print('> error: ', e)
         # Rollback the transaction to maintain consistency
         conn.rollback()
         logger.warning(f"Error updating status for backtest {backtest_id}: {e}", exc_info=True)
@@ -108,7 +116,8 @@ def update_backtest_urls(
     validation_data_url: Optional[str] = None,
     full_data_url: Optional[str] = None,
     log_file_url: Optional[str] = None,
-    report_url: Optional[str] = None
+    report_url: Optional[str] = None,
+    preview_image_url: Optional[str] = None
 ) -> dict:
     """Update backtest file URLs"""
     try:
@@ -121,6 +130,7 @@ def update_backtest_urls(
                 full_data_url = COALESCE(%s, full_data_url),
                 log_file_url = COALESCE(%s, log_file_url),
                 report_url = COALESCE(%s, report_url),
+                preview_image_url = COALESCE(%s, preview_image_url),
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = %s
             RETURNING *
@@ -131,6 +141,7 @@ def update_backtest_urls(
                 full_data_url,
                 log_file_url,
                 report_url,
+                preview_image_url,
                 backtest_id
             )
         )
@@ -140,6 +151,19 @@ def update_backtest_urls(
     except Exception as e:
         conn.rollback()
         logger.warning(f'Error updating backtest file: {e}')
+
+def update_backtest_preview_image_url(conn, backtest_id: UUID, preview_image_url: str) -> dict:
+    """Update backtest preview image URL"""
+    return execute_query_single(
+        conn,
+        """
+        UPDATE backtest_requests 
+        SET preview_image_url = %s,
+            is_public = true
+        WHERE id = %s
+        """,
+        (preview_image_url, backtest_id)
+    )
 
 def get_grouped_backtests(conn, user_id: UUID) -> dict:
     """Get backtests grouped by time periods"""
@@ -264,4 +288,38 @@ def get_grouped_backtests_search(conn, user_id: UUID, search_term: str) -> dict:
             f"%{search_term}%",
             f"%{search_term}%"
         )
+    )
+
+def generate_share_id() -> str:
+    """Generate a short unique ID for sharing"""
+    return shortuuid.uuid()[:8]  # 8 characters should be sufficient
+
+def update_backtest_share_id(conn, backtest_id: UUID) -> str:
+    """Update or create share_id for backtest"""
+    share_id = generate_share_id()
+    execute_query_single(
+        conn,
+        """
+        UPDATE backtest_requests 
+        SET share_id = %s,
+            is_public = true
+        WHERE id = %s
+        RETURNING share_id
+        """,
+        (share_id, backtest_id)
+    )
+    conn.commit()
+    return share_id
+
+def get_backtest_by_share_id(conn, share_id: str) -> Optional[dict]:
+    """Get a publicly shared backtest by share_id"""
+    return execute_query_single(
+        conn,
+        """
+        SELECT id, strategy_title, instrument_symbol, 
+               from_date, to_date, preview_image_url
+        FROM backtest_requests
+        WHERE share_id = %s AND is_public = true
+        """,
+        (share_id,)
     )

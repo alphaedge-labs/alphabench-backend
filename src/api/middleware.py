@@ -10,8 +10,7 @@ from src.utils.metrics import HTTP_REQUEST_COUNT, HTTP_REQUEST_DURATION
 class AnonymousUserMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Skip middleware for authentication endpoints
-        if request.url.path.startswith("/api/v1/auth"):
-            print('> return await call_next(request)')
+        if request.url.path.startswith("/v1/auth"):
             return await call_next(request)
             
         # Check for authorization header

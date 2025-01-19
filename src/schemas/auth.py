@@ -32,6 +32,16 @@ class UserResponse(BaseModel):
         ...,
         description="Unique identifier for the user"
     )
+    name: Optional[str] = Field(
+        None,
+        description="User's name (if authenticated via Google)",
+        example="John Doe"
+    )
+    picture_url: Optional[str] = Field(
+        None,
+        description="User's picture URL (if authenticated via Google)",
+        example="https://lh3.googleusercontent.com/a/ACg8ocJrY-..."
+    )
     email: Optional[EmailStr] = Field(
         None,
         description="User's email address (if authenticated via Google)",

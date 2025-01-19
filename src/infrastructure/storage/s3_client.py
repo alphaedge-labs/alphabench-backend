@@ -2,7 +2,6 @@ import boto3
 from botocore.exceptions import ClientError
 from typing import Optional
 import os
-import logging
 
 from src.config.settings import settings
 from src.utils.metrics import (
@@ -11,7 +10,8 @@ from src.utils.metrics import (
     track_time
 )
 
-logger = logging.getLogger()
+from src.utils.logger import get_logger
+logger = get_logger(__name__)
 
 class S3Client:
     def __init__(self):

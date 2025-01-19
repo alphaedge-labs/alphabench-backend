@@ -4,6 +4,9 @@ from src.core.auth.jwt import get_current_active_user
 from src.schemas.auth import UserResponse
 from src.db.queries.subscriptions import get_subscription_by_user_id
 from src.db.base import get_db
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(
     prefix="/v1/users",
@@ -58,6 +61,8 @@ async def get_current_user(
     with db as conn:
         # Get user's active subscription
         subscription = get_subscription_by_user_id(conn, current_user['id'])
+
+        logger.info(f"Subscription: {subscription}")
 
         # Combine user and subscription data
         user_data = {

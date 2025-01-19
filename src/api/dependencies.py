@@ -3,6 +3,7 @@ from datetime import date
 from typing import Optional
 
 from src.db.base import get_db, execute_query_single
+from src.db.queries.subscriptions import get_free_subscription_plan
 from src.core.auth.jwt import get_current_user
 from src.config.settings import settings
 
@@ -100,15 +101,41 @@ async def identify_anonymous_user(request: Request) -> dict:
         )
         
         if not user:
-            user = execute_query_single(
-                conn,
-                """
-                INSERT INTO users (ip_address, mac_address, is_anonymous)
-                VALUES (%s, %s, true)
-                RETURNING *
-                """,
-                (ip_address, mac_address)
-            )
-            conn.commit()
+            # start transaction
+            conn.execute("BEGIN")
+
+            try:
+                user = execute_query_single(
+                    conn,
+                    """
+                    INSERT INTO users (ip_address, mac_address, is_anonymous)
+                    VALUES (%s, %s, true)
+                    RETURNING *
+                    """,
+                    (ip_address, mac_address)
+                )
+
+                free_plan = get_free_subscription_plan(conn)
+                if free_plan:
+                    # Create subscription
+                    execute_query_single(
+                        conn,
+                        """
+                        INSERT INTO user_subscriptions (
+                            user_id, plan_id, start_date, end_date,
+                            status, is_active
+                        )
+                        VALUES (
+                            %s, %s, CURRENT_TIMESTAMP, 
+                            CURRENT_TIMESTAMP + INTERVAL '100 years',
+                            'active', true
+                        )
+                        """,
+                        (user['id'], free_plan['id'])
+                    )
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                raise e
             
         return user

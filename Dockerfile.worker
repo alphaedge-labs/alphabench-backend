@@ -25,6 +25,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
 
+ENV CELERY_MAX_TASKS_PER_CHILD=10 \
+    CELERY_MAX_MEMORY_PER_CHILD=512000
+
 RUN useradd -m -u 1000 app && \
     mkdir -p /app /tmp/prometheus_multiproc && \
     chown -R app:app /app /tmp/prometheus_multiproc && \
