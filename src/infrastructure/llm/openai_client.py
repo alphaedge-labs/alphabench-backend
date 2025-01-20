@@ -71,7 +71,6 @@ async def generate_backtest_script(strategy_description: str, extra_message: str
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": strategy_description}
             ],
-            max_tokens=2000,
             temperature=0.2,
             response_format={
                 "type": "json_object"
@@ -79,20 +78,23 @@ async def generate_backtest_script(strategy_description: str, extra_message: str
         )
         
         llm_response = response.choices[0].message.content
+        llm_response = re.sub(r'(?<!\\)\\(?!["\\/bfnrt]|u[0-9a-fA-F]{4})', r'\\\\', llm_response)
 
         logger.info(f'Response content: {llm_response}')
 
-        content = json.loads(llm_response)
-
+        try:
+            content = json.loads(llm_response)
+        except json.JSONDecodeError as e:
+            print(f'JSON Decode Error: {e}')
+            print(f'Problematic JSON: {llm_response}')
+            return None, None
+        
         logger.info(f'Response content: {content}')
 
         # Finding script
-        # script_match = re.search(r'```python\n(.*?)```', content['script'], re.DOTALL)
-        # script = script_match.group(1).strip() if script_match else None
-        script = content['script']
-
+        script = content.get('script')
         # Fetching data columns
-        data_columns = content['data_columns']
+        data_columns = content.get('data_columns')
 
         return script, data_columns
     except Exception as e:
@@ -114,7 +116,6 @@ async def generate_backtest_report(log_content: str) -> str:
                     "content": log_content
                 }
             ],
-            max_tokens=2000,
             temperature=0.3
         )
         
