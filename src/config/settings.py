@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     OPENAI_MODEL: str
 
+    # Deepseek settings
+    DEEPSEEK_API_KEY: str
+    DEEPSEEK_BASE_URL: str
+    DEEPSEEK_MODEL_NAME: str
+
     # Local running llm model
     LOCAL_LLM_SERVER_URL: str
     LOCAL_LLM_MODEL_NAME: str

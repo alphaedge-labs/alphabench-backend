@@ -102,7 +102,7 @@ async def identify_anonymous_user(request: Request) -> dict:
         
         if not user:
             # start transaction
-            conn.execute("BEGIN")
+            conn.cursor().execute("BEGIN")
 
             try:
                 user = execute_query_single(

@@ -11,22 +11,24 @@ from src.utils.metrics import (
 from src.utils.logger import get_logger
 from src.infrastructure.llm.prompts import (
     # Backtest Script Prompts
-    backtest_script_system_prompt_vectorbt,
+    backtest_script_deepseek_system_prompt_vectorbt,
     # Strategy Title Prompts
     strategy_title_system_prompt,
     # Backtest Report Prompts
     backtest_report_system_prompt_v3
 )
 
-client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+# client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+deepseek_client = AsyncOpenAI(api_key=settings.DEEPSEEK_API_KEY, base_url=settings.DEEPSEEK_BASE_URL)
+
 logger = get_logger(__name__)
 
 @track_time(LLM_REQUEST_DURATION.labels(operation='title_generation'))
 async def generate_strategy_title(strategy_description: str) -> str:
     """Generate a short title for the trading strategy"""
     try:
-        response = await client.chat.completions.create(
-            model="gpt-4",
+        response = await deepseek_client.chat.completions.create(
+            model=settings.DEEPSEEK_MODEL_NAME,
             messages=[
                 {
                     "role": "system",
@@ -56,15 +58,15 @@ async def generate_strategy_title(strategy_description: str) -> str:
 async def generate_backtest_script(strategy_description: str, extra_message: str) -> tuple[str, list[str]]:
     """Generate Python script and required data points for the strategy"""
     try:
-        system_prompt = backtest_script_system_prompt_vectorbt
+        system_prompt = backtest_script_deepseek_system_prompt_vectorbt
         
         if extra_message:
             system_prompt = system_prompt + f"\n{extra_message}"
 
         logger.info(f"Generated system prompt: {system_prompt}")
 
-        response = await client.chat.completions.create(
-            model="gpt-4o",
+        response = await deepseek_client.chat.completions.create(
+            model=settings.DEEPSEEK_MODEL_NAME,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": strategy_description}
@@ -72,23 +74,7 @@ async def generate_backtest_script(strategy_description: str, extra_message: str
             max_tokens=2000,
             temperature=0.2,
             response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "backtest_script_response",  # Name of the schema
-                    "strict": True,
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "script": {"type": "string"},  # Python script as a string
-                            "data_columns": {  # List of required data columns
-                                "type": "array",
-                                "items": {"type": "string"}
-                            }
-                        },
-                        "required": ["script", "data_columns"],
-                        "additionalProperties": False  # Enforce strict schema compliance
-                    }
-                }
+                "type": "json_object"
             }
         )
         
@@ -116,8 +102,8 @@ async def generate_backtest_script(strategy_description: str, extra_message: str
 async def generate_backtest_report(log_content: str) -> str:
     """Generate a markdown report from backtest logs"""
     try:
-        response = await client.chat.completions.create(
-            model="gpt-4",
+        response = await deepseek_client.chat.completions.create(
+            model=settings.DEEPSEEK_MODEL_NAME,
             messages=[
                 {
                     "role": "system",
@@ -150,8 +136,8 @@ async def generate_fixed_script(original_script: str, error_message: str) -> str
             "Please provide the corrected script only in response."
         )
 
-        response = await client.chat.completions.create(
-            model="gpt-4o",
+        response = await deepseek_client.chat.completions.create(
+            model=settings.DEEPSEEK_MODEL_NAME,
             messages=[
                 {
                     "role": "system",

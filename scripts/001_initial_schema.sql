@@ -176,7 +176,8 @@ CREATE TRIGGER update_daily_report_counts_updated_at
 
 -- Add Razorpay plan ID to subscription_plans
 ALTER TABLE subscription_plans
-ADD COLUMN razorpay_plan_id VARCHAR(100) UNIQUE;
+ADD COLUMN razorpay_plan_id VARCHAR(100) UNIQUE,
+ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT true;
 
 -- Add Razorpay subscription fields to user_subscriptions
 ALTER TABLE user_subscriptions
@@ -187,7 +188,6 @@ ADD COLUMN razorpay_signature VARCHAR(255);
 -- Add subscription status and is_active
 ALTER TABLE user_subscriptions
 ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'pending';
-ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT false;
 
 -- Add name and picture_url to users
 ALTER TABLE users
