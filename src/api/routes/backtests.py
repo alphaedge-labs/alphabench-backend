@@ -391,6 +391,12 @@ async def generate_share_link(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Report not yet generated"
             )
+        
+        if backtest.get('share_id'):
+            return ShareResponse(
+                share_url=f"{settings.SHARE_FRONTEND_URL}/s/{backtest['share_id']}",
+                share_text=f"Check out my backtest report: {settings.SHARE_FRONTEND_URL}/s/{backtest['share_id']}"
+            )
 
         try:
             # Fetch report content
