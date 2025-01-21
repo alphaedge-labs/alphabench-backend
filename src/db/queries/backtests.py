@@ -152,17 +152,21 @@ def update_backtest_urls(
         conn.rollback()
         logger.warning(f'Error updating backtest file: {e}')
 
-def update_backtest_preview_image_url(conn, backtest_id: UUID, preview_image_url: str) -> dict:
+def update_backtest_preview_image_url(conn, backtest_id: str, preview_image_url: str) -> dict:
     """Update backtest preview image URL"""
+    query = """
+    UPDATE backtest_requests 
+    SET preview_image_url = %(preview_image_url)s
+    WHERE id = %(backtest_id)s::uuid
+    RETURNING *
+    """
     return execute_query_single(
         conn,
-        """
-        UPDATE backtest_requests 
-        SET preview_image_url = %s,
-            is_public = true
-        WHERE id = %s
-        """,
-        (preview_image_url, backtest_id)
+        query,
+        {
+            "preview_image_url": preview_image_url,
+            "backtest_id": backtest_id
+        }
     )
 
 def get_grouped_backtests(conn, user_id: UUID) -> dict:
@@ -294,19 +298,23 @@ def generate_share_id() -> str:
     """Generate a short unique ID for sharing"""
     return shortuuid.uuid()[:8]  # 8 characters should be sufficient
 
-def update_backtest_share_id(conn, backtest_id: UUID) -> str:
+def update_backtest_share_id(conn, backtest_id: str) -> str:
     """Update or create share_id for backtest"""
-    share_id = generate_share_id()
+    share_id = str(generate_share_id())
+    query = """
+        UPDATE backtest_requests 
+        SET share_id = %(share_id)s,
+            is_public = true
+        WHERE id = %(backtest_id)s::uuid
+        RETURNING share_id
+    """
     execute_query_single(
         conn,
-        """
-        UPDATE backtest_requests 
-        SET share_id = %s,
-            is_public = true
-        WHERE id = %s
-        RETURNING share_id
-        """,
-        (share_id, backtest_id)
+        query,
+        {
+            "share_id": share_id,
+            "backtest_id": backtest_id
+        }
     )
     conn.commit()
     return share_id

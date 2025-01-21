@@ -399,35 +399,65 @@ async def generate_share_link(
             report_content = await s3_client.get_file_content(report_key)
 
             # Generate preview image
-            async with httpx.AsyncClient() as client:
-                preview_response = await client.post(
-                    f"{settings.PREVIEW_IMAGE_SERVER_URL}/generate-preview",
-                    json={
-                        "userId": str(current_user['id']),
-                        "markdown": report_content
-                    }
+            try:
+                async with httpx.AsyncClient() as client:
+                    print(f'current_user["id"]: {current_user["id"]}')
+                    print(f'report_content: {report_content}')
+                    print(f'settings.PREVIEW_IMAGE_SERVER_URL: {settings.PREVIEW_IMAGE_SERVER_URL}')
+                    print(f"payload:", json.dumps({
+                            "userId": str(current_user['id']),
+                            "markdown": report_content
+                        })
+                    )
+
+                    preview_response = await client.post(
+                        f"{settings.PREVIEW_IMAGE_SERVER_URL}/generate-preview",
+                        json={
+                            "userId": str(current_user['id']),
+                            "markdown": report_content
+                        },
+                        headers={
+                            "Content-Type": "application/json"
+                        },
+                        timeout=30
+                    )
+                    logger.info(f"Preview response status: {preview_response.status_code}")
+                    logger.info(f"Preview response content: {preview_response.text}")
+                    preview_response.raise_for_status()
+                    preview_data = preview_response.json()
+                    preview_image_url = preview_data['imageUrl']
+
+                # Update backtest with preview URL
+                update_backtest_preview_image_url(
+                    conn,
+                    str(backtest_id),
+                    preview_image_url=preview_image_url
                 )
-                preview_response.raise_for_status()
-                preview_data = preview_response.json()
-                preview_image_url = preview_data['imageUrl']
 
-            # Update backtest with preview URL
-            update_backtest_preview_image_url(
-                conn,
-                backtest_id,
-                preview_image_url=preview_image_url
-            )
+                # Generate share ID
+                share_id = update_backtest_share_id(conn, str(backtest_id))
 
-            # Generate share ID
-            share_id = update_backtest_share_id(conn, backtest_id)
+                # Generate shareable URL using short ID
+                share_url = f"{settings.SHARE_FRONTEND_URL}/s/{share_id}"
+                share_text = f"Check out my backtest report: {share_url}"
 
-            # Generate shareable URL using short ID
-            share_url = f"{settings.SHARE_FRONTEND_URL}/s/{share_id}"
-            share_text = f"Check out my backtest report: {share_url}"
+                return ShareResponse(share_url=share_url, share_text=share_text)
 
-            return ShareResponse(share_url=share_url, share_text=share_text)
-
+            except httpx.RequestError as e:
+                logger.error(f"Request failed: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to connect to preview service: {str(e)}"
+                )
+            except httpx.HTTPStatusError as e:
+                logger.error(f"HTTP error occurred: {str(e)}")
+                logger.error(f"Response content: {e.response.text}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Preview service error: {str(e)}"
+                )
         except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to generate share link: {str(e)}"
