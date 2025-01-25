@@ -1,6 +1,7 @@
 from openai import AsyncOpenAI
 import re
 import json
+from typing import Optional
 
 from src.config.settings import settings
 from src.utils.metrics import (
@@ -157,3 +158,43 @@ async def generate_fixed_script(original_script: str, error_message: str) -> str
         return script
     except Exception as e:
         raise Exception(f"Failed to generate fixed script: {str(e)}")
+
+async def fix_backtest_script(script: str, error_message: str) -> Optional[str]:
+    """
+    Attempt to fix a backtest script based on the error message.
+    Returns improved script or None if unable to fix.
+    """
+    system_prompt = """You are an expert Python developer specializing in algorithmic trading.
+    Fix the provided backtest script based on the error message. Ensure the script follows
+    best practices and handles edge cases appropriately. If the error cannot be fixed or
+    requires fundamental strategy changes, return None."""
+
+    user_message = f"""
+    The following backtest script failed validation with this error:
+    {error_message}
+
+    Here's the script:
+    {script}
+
+    Please provide an improved version that fixes the error, or return None if the error
+    cannot be fixed without changing the core strategy."""
+
+    response = await deepseek_client.chat.completions.create(
+        model=settings.DEEPSEEK_MODEL_NAME,
+        messages=[
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": user_message
+            }
+        ],
+        max_tokens=2000,
+        temperature=0.2
+    )
+
+    if response and "None" not in response.choices[0].message.content:
+        return response.choices[0].message.content.strip()
+    return None

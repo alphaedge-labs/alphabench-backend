@@ -407,15 +407,6 @@ async def generate_share_link(
             # Generate preview image
             try:
                 async with httpx.AsyncClient() as client:
-                    print(f'current_user["id"]: {current_user["id"]}')
-                    print(f'report_content: {report_content}')
-                    print(f'settings.PREVIEW_IMAGE_SERVER_URL: {settings.PREVIEW_IMAGE_SERVER_URL}')
-                    print(f"payload:", json.dumps({
-                            "userId": str(current_user['id']),
-                            "markdown": report_content
-                        })
-                    )
-
                     preview_response = await client.post(
                         f"{settings.PREVIEW_IMAGE_SERVER_URL}/generate-preview",
                         json={
@@ -427,8 +418,6 @@ async def generate_share_link(
                         },
                         timeout=30
                     )
-                    logger.info(f"Preview response status: {preview_response.status_code}")
-                    logger.info(f"Preview response content: {preview_response.text}")
                     preview_response.raise_for_status()
                     preview_data = preview_response.json()
                     preview_image_url = preview_data['imageUrl']

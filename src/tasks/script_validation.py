@@ -3,7 +3,6 @@ from uuid import UUID
 import subprocess
 import tempfile
 import os
-import requests
 import asyncio
                 
 
@@ -12,17 +11,23 @@ from src.db.base import get_db
 from src.db.queries.backtests import (
     update_backtest_status
 )
+
 from src.infrastructure.storage.s3_client import S3Client
+from src.infrastructure.queue.instrumentation import track_celery_task
+from src.infrastructure.llm.openai_client import fix_backtest_script
 
 from src.constants.backtests import (
     BACKTEST_STATUS_VALIDATION_FAILED,
     BACKTEST_STATUS_VALIDATION_IN_PROGRESS,
-    BACKTEST_STATUS_VALIDATION_PASSED
+    BACKTEST_STATUS_VALIDATION_PASSED,
+    BACKTEST_STATUS_SCRIPT_GENERATION_IN_PROGRESS
 )
-from src.infrastructure.queue.instrumentation import track_celery_task
 
 from src.utils.logger import get_logger
+
 logger = get_logger(__name__)
+
+MAX_RETRY_ATTEMPTS = 3  # Configure max retries
 
 class ScriptValidationTask(Task):
     def on_failure(self, exc, task_id, args, kwargs, einfo):
@@ -43,12 +48,12 @@ class ScriptValidationTask(Task):
     name="src.tasks.script_validation.validate_backtest_script"
 )
 @track_celery_task("validation")
-def validate_backtest_script(self, backtest_id: UUID):
-    """Validate the generated backtest script"""
+def validate_backtest_script(self, backtest_id: UUID, attempt: int = 1):
+    """Validate the generated backtest script with retry logic"""
     with get_db() as conn:
         try:
             # Update status to validating
-            backtest = update_backtest_status(conn, backtest_id, BACKTEST_STATUS_VALIDATION_IN_PROGRESS)
+            update_backtest_status(conn, backtest_id, BACKTEST_STATUS_VALIDATION_IN_PROGRESS)
             
             # Create temporary directory
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -67,7 +72,7 @@ def validate_backtest_script(self, backtest_id: UUID):
                         s3_client.download_file(script_key, script_path),
                         s3_client.download_file(data_key, data_path)
                     )
-
+                
                 # Run the async download function
                 asyncio.run(download_files())
                 logger.info(f'Downloading files for backtest: {backtest_id}')
@@ -109,11 +114,54 @@ def validate_backtest_script(self, backtest_id: UUID):
                 execute_backtest.delay(backtest_id=backtest_id)
                 logger.info(f"Queued execution task for backtesting: {backtest_id}")
             
-        except Exception as e:
+        except (subprocess.TimeoutExpired, Exception) as e:
+            error_message = str(e)
+            if isinstance(e, subprocess.TimeoutExpired):
+                error_message = f"Script execution timed out after 300 seconds"
+            
+            if attempt < MAX_RETRY_ATTEMPTS:
+                logger.info(f"Validation attempt {attempt} failed, trying to fix script...")
+                
+                # Read the current script
+                with open(script_path, 'r') as f:
+                    current_script = f.read()
+                
+                # Get improved script from GPT
+                improved_script = asyncio.run(fix_backtest_script(
+                    script=current_script,
+                    error_message=error_message
+                ))
+                
+                if improved_script:
+                    # Upload improved script
+                    s3_client = S3Client()
+                    script_key = f"{backtest_id}/script.py"
+                    s3_client.upload_file_content(
+                        script_key,
+                        improved_script,
+                        content_type="text/plain"
+                    )
+                    
+                    # Update status
+                    update_backtest_status(
+                        conn,
+                        backtest_id,
+                        BACKTEST_STATUS_SCRIPT_GENERATION_IN_PROGRESS,
+                        f"Retrying with improved script. Attempt {attempt + 1}/{MAX_RETRY_ATTEMPTS}"
+                    )
+                    
+                    # Queue new validation attempt
+                    validate_backtest_script.delay(
+                        backtest_id=backtest_id,
+                        attempt=attempt + 1
+                    )
+                    return
+                
+            # If max attempts reached or no improvement possible
             update_backtest_status(
                 conn,
                 backtest_id,
                 BACKTEST_STATUS_VALIDATION_FAILED,
-                str(e)
+                f"Validation failed after {attempt} attempts. Last error: {error_message}"
             )
-            raise
+            raise Exception(f"Validation failed after {attempt} attempts. Last error: {error_message}")
